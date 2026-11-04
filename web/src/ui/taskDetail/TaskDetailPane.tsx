@@ -232,15 +232,24 @@ function TitleEditor({ task }: { task: Task }) {
   const { repo } = useServices()
   const [title, setTitle] = useState(task.title)
   const focused = useRef(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!focused.current) setTitle(task.title)
   }, [task.title])
+  // A pending save is deliberately not cancelled on unmount: if the pane closes before the field
+  // blurs (e.g. Back on a phone) the edit is still saved. It only calls the repository, which
+  // ignores no-op changes.
+  const save = (value: string) => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    const next = value.trim()
+    if (next && next !== task.title) void repo.updateTask(task.id, { title: next })
+  }
 
   const commit = () => {
     focused.current = false
-    const next = title.trim()
-    if (next && next !== task.title) void repo.updateTask(task.id, { title: next })
-    else setTitle(task.title)
+    save(title)
+    if (!title.trim()) setTitle(task.title)
   }
 
   return (
@@ -262,7 +271,12 @@ function TitleEditor({ task }: { task: Task }) {
         value={title}
         aria-label="Task title"
         onFocus={() => (focused.current = true)}
-        onChange={(_, d) => setTitle(d.value.replace(/\n/g, ''))}
+        onChange={(_, d) => {
+          const value = d.value.replace(/\n/g, '')
+          setTitle(value)
+          if (timer.current) clearTimeout(timer.current)
+          timer.current = setTimeout(() => save(value), 1000)
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
