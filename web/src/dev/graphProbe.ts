@@ -2,6 +2,7 @@
 //   await __woutist.graph('/me/todo/lists')
 //   await __woutist.graph('/me/todo/lists/{id}/tasks', { method: 'POST', body: { title: 'x' } })
 import { getGraphToken } from '../auth/tokens'
+import { runGraphSpike } from './graphSpike'
 
 interface ProbeInit {
   method?: string
@@ -33,8 +34,8 @@ async function graph(path: string, init: ProbeInit = {}) {
 
 declare global {
   interface Window {
-    __woutist?: { graph: typeof graph }
+    __woutist?: { graph: typeof graph; spike: typeof runGraphSpike }
   }
 }
 
-window.__woutist = { graph }
+window.__woutist = { graph, spike: runGraphSpike }
