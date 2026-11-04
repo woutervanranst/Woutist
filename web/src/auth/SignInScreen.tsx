@@ -1,5 +1,5 @@
 import { Button, Text, Title1, makeStyles, tokens } from '@fluentui/react-components'
-import { signIn } from './tokens'
+import { useAuth } from './AuthContext'
 
 const useStyles = makeStyles({
   root: {
@@ -21,6 +21,7 @@ const useStyles = makeStyles({
 
 export function SignInScreen() {
   const styles = useStyles()
+  const { signIn } = useAuth()
   return (
     <main className={styles.root}>
       <Title1>Woutist</Title1>

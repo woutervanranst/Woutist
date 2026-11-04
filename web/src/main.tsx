@@ -1,20 +1,30 @@
-import { MsalProvider } from '@azure/msal-react'
-import { StrictMode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
-import { initMsal } from './auth/msal'
+import { MsalAuthProvider, StaticAuthProvider } from './auth/AuthContext'
 
 async function bootstrap() {
-  const msal = await initMsal()
-  if (import.meta.env.DEV) await import('./dev/graphProbe')
+  let auth: ReactNode
 
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <MsalProvider instance={msal}>
+  if (import.meta.env.DEV && (await import('./dev/demo')).isDemoRequested()) {
+    const { createDemoAuth } = await import('./dev/demo')
+    auth = (
+      <StaticAuthProvider adapter={createDemoAuth()}>
         <App />
-      </MsalProvider>
-    </StrictMode>,
-  )
+      </StaticAuthProvider>
+    )
+  } else {
+    const { initMsal } = await import('./auth/msal')
+    const msal = await initMsal()
+    if (import.meta.env.DEV) await import('./dev/graphProbe')
+    auth = (
+      <MsalAuthProvider instance={msal}>
+        <App />
+      </MsalAuthProvider>
+    )
+  }
+
+  createRoot(document.getElementById('root')!).render(<StrictMode>{auth}</StrictMode>)
 }
 
 void bootstrap()
