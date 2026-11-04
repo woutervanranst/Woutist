@@ -1,0 +1,28 @@
+{
+  "name": "@woutist/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Woutist reminder push API (Azure Functions v4, Flex Consumption)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "start": "npm run build && npx -y azure-functions-core-tools@4 start",
+    "lint": "oxlint src"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/web-push": "^3.6.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.12"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.2",
+    "@azure/functions": "^4.17.0",
+    "@azure/identity": "^4.14.1",
+    "jose": "^6.2.15",
+    "web-push": "^3.6.7"
+  }
+}

@@ -1,0 +1,33 @@
+# Dependencies & build output
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+
+# Local env & secrets: never commit
+.env
+.env.*
+!.env.example
+*.local
+api/local.settings.json
+api/deploy/
+*.pem
+*.key
+*.pfx
+
+# Azure Functions / Azurite
+api/.azurite/
+__azurite_db_*
+__blobstorage__/
+__queuestorage__/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
