@@ -20,22 +20,23 @@ import {
   tokens,
   useToastController,
 } from '@fluentui/react-components'
-import {
-  ArrowLeftRegular,
-  ArrowSyncRegular,
-  CloudCheckmarkRegular,
-  CloudOffRegular,
-  ErrorCircleRegular,
-  NavigationRegular,
-  SettingsRegular,
-  SignOutRegular,
-} from '@fluentui/react-icons'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { ArrowLeftRegular } from '@fluentui/react-icons/svg/arrow-left'
+import { ArrowSyncRegular } from '@fluentui/react-icons/svg/arrow-sync'
+import { CloudCheckmarkRegular } from '@fluentui/react-icons/svg/cloud-checkmark'
+import { CloudOffRegular } from '@fluentui/react-icons/svg/cloud-off'
+import { ErrorCircleRegular } from '@fluentui/react-icons/svg/error-circle'
+import { NavigationRegular } from '@fluentui/react-icons/svg/navigation'
+import { SettingsRegular } from '@fluentui/react-icons/svg/settings'
+import { SignOutRegular } from '@fluentui/react-icons/svg/sign-out'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useServices, useSignOut } from '../../app/AppServices'
 import { useMediaQuery } from '../../app/theme'
 import type { SmartListId } from '../../models/views'
 import { SettingsDialog } from '../settings/SettingsDialog'
+import { NotificationSettings } from '../settings/NotificationSettings'
+import { PwaUpdatePrompt, useServiceWorkerNavigation } from '../../platform/pwa'
+import { useInAppReminders } from './useInAppReminders'
 import { Sidebar } from '../sidebar/Sidebar'
 import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
 import { TaskListView } from '../taskList/TaskListView'
@@ -67,8 +68,22 @@ const useStyles = makeStyles({
   mobileDetail: { display: 'flex', flexDirection: 'column', height: '100%' },
 })
 
-export function AppShell({ settingsExtra }: { settingsExtra?: ReactNode }) {
+export function AppShell() {
   const styles = useStyles()
+  const { dispatchToast } = useToastController('app')
+  useServiceWorkerNavigation()
+  useInAppReminders(
+    useCallback(
+      (title: string) =>
+        dispatchToast(
+          <Toast>
+            <ToastTitle>⏰ {title}</ToastTitle>
+          </Toast>,
+          { intent: 'info', timeout: 10_000 },
+        ),
+      [dispatchToast],
+    ),
+  )
   const desktop = useMediaQuery('(min-width: 900px)')
   const wide = useMediaQuery('(min-width: 1200px)')
   const [navOpen, setNavOpen] = useState(false)
@@ -164,8 +179,9 @@ export function AppShell({ settingsExtra }: { settingsExtra?: ReactNode }) {
         )}
       </div>
 
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} extra={settingsExtra} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} extra={<NotificationSettings />} />
       <Toaster toasterId="app" position="bottom" />
+      <PwaUpdatePrompt />
       <SyncErrorToasts />
     </div>
   )

@@ -5,6 +5,9 @@ import { deleteAccountDb, openAccountDb, type WoutistDb } from '../services/db'
 import { TodoRepository } from '../services/repository'
 import { SyncEngine } from '../services/sync/syncEngine'
 import { TaskService } from '../services/taskService'
+import { PushApi } from '../services/push/pushApi'
+import { PushController } from '../services/push/pushController'
+import { config, pushEnabled } from '../config'
 
 export interface AppServices {
   accountKey: string
@@ -12,6 +15,8 @@ export interface AppServices {
   svc: TaskService
   engine: SyncEngine
   repo: TodoRepository
+  /** Null when the reminder push service isn't configured for this build. */
+  push: PushController | null
 }
 
 const AppServicesContext = createContext<AppServices | null>(null)
@@ -26,14 +31,27 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     const svc = new TaskService(auth.createGraphClient())
     const engine = new SyncEngine(db, svc)
     const repo = new TodoRepository(db, engine.requestFlush)
-    return { accountKey, db, svc, engine, repo }
+    const push = pushEnabled
+      ? new PushController({
+          db,
+          engine,
+          api: new PushApi(config.apiBaseUrl, auth.getApiToken),
+          vapidKey: config.vapidPublicKey,
+          accountKey,
+        })
+      : null
+    return { accountKey, db, svc, engine, repo, push }
     // The Graph client only depends on the account.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountKey])
 
   useEffect(() => {
     services.engine.start()
-    return () => services.engine.stop()
+    services.push?.start()
+    return () => {
+      services.push?.stop()
+      services.engine.stop()
+    }
   }, [services])
 
   return <AppServicesContext.Provider value={services}>{children}</AppServicesContext.Provider>
@@ -60,6 +78,8 @@ export function useSignOut(): () => Promise<void> {
   const { signOut } = useAuth()
   return async () => {
     services.engine.stop()
+    // This device stops receiving this account's reminders (other devices are unaffected).
+    await services.push?.disable().catch(() => {})
     for (const hook of signOutHooks) {
       try {
         await hook(services)

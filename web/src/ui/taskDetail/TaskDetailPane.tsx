@@ -21,24 +21,21 @@ import {
   Toast,
   ToastTitle,
 } from '@fluentui/react-components'
-import {
-  AlertRegular,
-  ArrowRepeatAllRegular,
-  ArrowUpRegular,
-  AttachRegular,
-  CalendarLtrRegular,
-  CheckmarkCircleFilled,
-  CircleRegular,
-  DeleteRegular,
-  DismissRegular,
-  DocumentRegular,
-  LinkRegular,
-  MoreHorizontalRegular,
-  PanelRightContractRegular,
-  StarFilled,
-  StarRegular,
-  TagRegular,
-} from '@fluentui/react-icons'
+import { AlertRegular } from '@fluentui/react-icons/svg/alert'
+import { ArrowRepeatAllRegular } from '@fluentui/react-icons/svg/arrow-repeat-all'
+import { ArrowUpRegular } from '@fluentui/react-icons/svg/arrow-up'
+import { AttachRegular } from '@fluentui/react-icons/svg/attach'
+import { CalendarLtrRegular } from '@fluentui/react-icons/svg/calendar-ltr'
+import { CheckmarkCircleFilled } from '@fluentui/react-icons/svg/checkmark-circle'
+import { CircleRegular } from '@fluentui/react-icons/svg/circle'
+import { DeleteRegular } from '@fluentui/react-icons/svg/delete'
+import { DismissRegular } from '@fluentui/react-icons/svg/dismiss'
+import { DocumentRegular } from '@fluentui/react-icons/svg/document'
+import { LinkRegular } from '@fluentui/react-icons/svg/link'
+import { MoreHorizontalRegular } from '@fluentui/react-icons/svg/more-horizontal'
+import { PanelRightContractRegular } from '@fluentui/react-icons/svg/panel-right-contract'
+import { StarFilled, StarRegular } from '@fluentui/react-icons/svg/star'
+import { TagRegular } from '@fluentui/react-icons/svg/tag'
 import { useEffect, useRef, useState } from 'react'
 import { useServices } from '../../app/AppServices'
 import type { Step, Task } from '../../models/todo'

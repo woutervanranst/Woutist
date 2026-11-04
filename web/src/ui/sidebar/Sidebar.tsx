@@ -12,7 +12,10 @@ import {
   mergeClasses,
   tokens,
 } from '@fluentui/react-components'
-import { AddRegular, DeleteRegular, EditRegular, PeopleRegular } from '@fluentui/react-icons'
+import { AddRegular } from '@fluentui/react-icons/svg/add'
+import { DeleteRegular } from '@fluentui/react-icons/svg/delete'
+import { EditRegular } from '@fluentui/react-icons/svg/edit'
+import { PeopleRegular } from '@fluentui/react-icons/svg/people'
 import { type KeyboardEvent, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { useServices } from '../../app/AppServices'

@@ -11,20 +11,17 @@ import {
   mergeClasses,
   tokens,
 } from '@fluentui/react-components'
-import {
-  AlertRegular,
-  ArrowMoveRegular,
-  ArrowRepeatAllRegular,
-  ArrowSyncRegular,
-  AttachRegular,
-  CalendarLtrRegular,
-  CheckmarkCircleFilled,
-  CircleRegular,
-  DeleteRegular,
-  NoteRegular,
-  StarFilled,
-  StarRegular,
-} from '@fluentui/react-icons'
+import { AlertRegular } from '@fluentui/react-icons/svg/alert'
+import { ArrowMoveRegular } from '@fluentui/react-icons/svg/arrow-move'
+import { ArrowRepeatAllRegular } from '@fluentui/react-icons/svg/arrow-repeat-all'
+import { ArrowSyncRegular } from '@fluentui/react-icons/svg/arrow-sync'
+import { AttachRegular } from '@fluentui/react-icons/svg/attach'
+import { CalendarLtrRegular } from '@fluentui/react-icons/svg/calendar-ltr'
+import { CheckmarkCircleFilled } from '@fluentui/react-icons/svg/checkmark-circle'
+import { CircleRegular } from '@fluentui/react-icons/svg/circle'
+import { DeleteRegular } from '@fluentui/react-icons/svg/delete'
+import { NoteRegular } from '@fluentui/react-icons/svg/note'
+import { StarFilled, StarRegular } from '@fluentui/react-icons/svg/star'
 import { type MouseEvent, memo } from 'react'
 import type { Task, TodoList } from '../../models/todo'
 import { addDays, todayLocal } from '../../models/time'

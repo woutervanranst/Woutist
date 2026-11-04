@@ -12,13 +12,11 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components'
-import {
-  AddRegular,
-  ArrowSortRegular,
-  ChevronDownRegular,
-  ChevronRightRegular,
-  CircleRegular,
-} from '@fluentui/react-icons'
+import { AddRegular } from '@fluentui/react-icons/svg/add'
+import { ArrowSortRegular } from '@fluentui/react-icons/svg/arrow-sort'
+import { ChevronDownRegular } from '@fluentui/react-icons/svg/chevron-down'
+import { ChevronRightRegular } from '@fluentui/react-icons/svg/chevron-right'
+import { CircleRegular } from '@fluentui/react-icons/svg/circle'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useServices } from '../../app/AppServices'
 import type { Task, TaskChanges } from '../../models/todo'

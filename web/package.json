@@ -10,7 +10,8 @@
     "lint": "oxlint",
     "typecheck": "tsc -b --noEmit",
     "test": "TZ=Europe/Brussels vitest run",
-    "test:watch": "TZ=Europe/Brussels vitest"
+    "test:watch": "TZ=Europe/Brussels vitest",
+    "generate-pwa-assets": "pwa-assets-generator"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.27.0",

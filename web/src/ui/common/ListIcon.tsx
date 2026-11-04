@@ -1,13 +1,11 @@
-import {
-  AppsListRegular,
-  CheckmarkCircleRegular,
-  CalendarLtrRegular,
-  FlagRegular,
-  HomeRegular,
-  ListRegular,
-  SearchRegular,
-  StarRegular,
-} from '@fluentui/react-icons'
+import { AppsListRegular } from '@fluentui/react-icons/svg/apps-list'
+import { CheckmarkCircleRegular } from '@fluentui/react-icons/svg/checkmark-circle'
+import { CalendarLtrRegular } from '@fluentui/react-icons/svg/calendar-ltr'
+import { FlagRegular } from '@fluentui/react-icons/svg/flag'
+import { HomeRegular } from '@fluentui/react-icons/svg/home'
+import { ListRegular } from '@fluentui/react-icons/svg/list'
+import { SearchRegular } from '@fluentui/react-icons/svg/search'
+import { StarRegular } from '@fluentui/react-icons/svg/star'
 import type { TodoList } from '../../models/todo'
 import { type SmartListId, splitListEmoji } from '../../models/views'
 
