@@ -8,7 +8,7 @@
     "ENTRA_CLIENT_ID": "ef5e6e64-2019-41a7-8b29-35ef15b28c5f",
     "VAPID_PUBLIC_KEY": "<generate with: npx web-push generate-vapid-keys>",
     "VAPID_PRIVATE_KEY": "<never commit this>",
-    "VAPID_SUBJECT": "http://localhost:5173",
+    "VAPID_SUBJECT": "mailto:you@example.com",
     "ALLOWED_USERS": ""
   },
   "Host": {
