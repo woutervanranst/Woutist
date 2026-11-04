@@ -36,12 +36,17 @@ echo "==> Deploy identity $IDENTITY with federated credential for environment:pr
 az identity create -g "$RG" -n "$IDENTITY" -l westeurope -o none
 IDENTITY_CLIENT_ID=$(az identity show -g "$RG" -n "$IDENTITY" --query clientId -o tsv)
 IDENTITY_PRINCIPAL_ID=$(az identity show -g "$RG" -n "$IDENTITY" --query principalId -o tsv)
-if ! az identity federated-credential show -g "$RG" --identity-name "$IDENTITY" -n github-production >/dev/null 2>&1; then
-  az identity federated-credential create -g "$RG" --identity-name "$IDENTITY" -n github-production \
-    --issuer https://token.actions.githubusercontent.com \
-    --subject "repo:$FULL:environment:production" \
-    --audiences api://AzureADTokenExchange -o none
+# GitHub issues OIDC subjects with immutable owner/repo ids for new repos, e.g.
+# repo:owner@123/name@456:environment:production (survives renames; can't be squatted).
+SUBJECT=$(gh api "repos/$FULL" --jq '"repo:\(.owner.login)@\(.owner.id)/\(.name)@\(.id):environment:production"')
+if az identity federated-credential show -g "$RG" --identity-name "$IDENTITY" -n github-production >/dev/null 2>&1; then
+  CMD=update
+else
+  CMD=create
 fi
+az identity federated-credential $CMD -g "$RG" --identity-name "$IDENTITY" -n github-production \
+  --issuer https://token.actions.githubusercontent.com --subject "$SUBJECT" \
+  --audiences api://AzureADTokenExchange -o none
 FUNC_ID=$(az functionapp show -g "$RG" -n "$FUNC" --query id -o tsv)
 for attempt in 1 2 3 4 5 6; do
   if az role assignment create --assignee-object-id "$IDENTITY_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal \

@@ -7,24 +7,24 @@ import {
 import { useEffect, useState } from 'react'
 import type { ThemePref } from './prefs'
 
-/** Woutist brand ramp (teal), from darkest (10) to lightest (160). */
+/** Woutist brand ramp around #186DB6 (the Blue Software blue), darkest (10) to lightest (160). */
 const brand: BrandVariants = {
-  10: '#021414',
-  20: '#052222',
-  30: '#073030',
-  40: '#093e3e',
-  50: '#0b4c4c',
-  60: '#0c5a5a',
-  70: '#0d6868',
-  80: '#0e7c7b',
-  90: '#1f8a89',
-  100: '#359897',
-  110: '#4ca6a5',
-  120: '#64b4b3',
-  130: '#7dc2c1',
-  140: '#97d0cf',
-  150: '#b2dedd',
-  160: '#cdebea',
+  10: '#05182b',
+  20: '#07223b',
+  30: '#0a2d4d',
+  40: '#0c385f',
+  50: '#0f4372',
+  60: '#114f85',
+  70: '#145d9c',
+  80: '#186db6',
+  90: '#2f7cbd',
+  100: '#468ac5',
+  110: '#609acd',
+  120: '#79aad5',
+  130: '#92badd',
+  140: '#accae5',
+  150: '#c5dbed',
+  160: '#dfebf5',
 }
 
 export const lightTheme: Theme = createLightTheme(brand)

@@ -55,7 +55,7 @@ Run `scripts/setup-github.sh` from the repo root. It:
 - creates the public repo
 - turns on secret scanning and push protection
 - creates the `production` environment, which only `main` can deploy to
-- creates the `id-woutist-github` identity with a federated credential for `repo:woutervanranst/Woutist:environment:production` and *Website Contributor* on the Function App only
+- creates the `id-woutist-github` identity with a federated credential for the `production` environment (GitHub's immutable-id subject `repo:woutervanranst@<ownerId>/Woutist@<repoId>:environment:production`) and *Website Contributor* on the Function App only
 - sets environment secrets (SWA deploy token, OIDC ids) and repository variables (the public `VITE_*` values)
 - pushes `main`
 

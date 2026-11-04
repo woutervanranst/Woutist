@@ -226,16 +226,19 @@ export class FakeGraph {
         const ids = token
           ? [...new Set(this.changes.filter((c) => c.listId === params.listId && c.seq > token).map((c) => c.taskId))]
           : [...l.tasks.keys()]
-        // Real Graph delta responses don't expand checklistItems.
+        // Like real Graph: steps are included when $expand was requested (and the deltaLink keeps it).
+        const expand = url.searchParams.get('$expand')
         const items = ids.map((id) => {
           const t = l.tasks.get(id)
           if (!t) return { id, '@removed': { reason: 'deleted' } }
+          if (expand?.includes('checklistItems')) return t
           const { checklistItems: _omit, ...rest } = t
           return rest
         })
-        return this.page(items, url, {
-          '@odata.deltaLink': `${BASE}/me/todo/lists/${params.listId}/tasks/delta?$deltatoken=${this.seq}`,
-        })
+        const link = new URL(`${BASE}/me/todo/lists/${params.listId}/tasks/delta`)
+        link.searchParams.set('$deltatoken', String(this.seq))
+        if (expand) link.searchParams.set('$expand', expand)
+        return this.page(items, url, { '@odata.deltaLink': link.toString() })
       })),
       http.get(`${BASE}/me/todo/lists/:listId/tasks`, wrap('GET', ({ params, url }) =>
         this.page([...this.list(params.listId).tasks.values()].map(taskOut), url),

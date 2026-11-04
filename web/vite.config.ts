@@ -20,7 +20,7 @@ export default defineConfig({
         name: 'Woutist',
         short_name: 'Woutist',
         description: 'Your Microsoft To Do lists, anywhere.',
-        theme_color: '#0e7c7b',
+        theme_color: '#186db6',
         background_color: '#f5f5f5',
         display: 'standalone',
         start_url: '/',

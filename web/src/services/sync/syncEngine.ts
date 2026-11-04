@@ -479,10 +479,10 @@ export class SyncEngine {
     const key = `delta:tasks:${listId}`
     const link = full ? undefined : await this.db.getMeta<string>(key)
     if (!link) {
-      const all = await this.svc.getTasks(listId)
-      const delta = await this.svc.tasksDelta(listId)
-      await this.replaceListTasks(listId, all)
-      await this.db.setMeta(key, delta.deltaLink)
+      // Initial round: every task (with steps) plus a deltaLink to continue from.
+      const initial = await this.svc.tasksDelta(listId)
+      await this.replaceListTasks(listId, await this.withSteps(listId, initial.changed))
+      await this.db.setMeta(key, initial.deltaLink)
       return
     }
 
@@ -500,17 +500,10 @@ export class SyncEngine {
     }
 
     const pending = await this.pendingIds()
-    // Delta responses don't include steps, so changed tasks are re-read with $expand.
-    const changedIds = delta.changed.map((t) => t.id!).filter((id) => !pending.tasks.has(id))
-    let fresh: GraphTodoTask[]
-    if (changedIds.length > PER_TASK_FETCH_LIMIT) {
-      const wanted = new Set(changedIds)
-      fresh = (await this.svc.getTasks(listId)).filter((t) => wanted.has(t.id!))
-    } else {
-      fresh = (await mapLimit(changedIds, 4, (id) => this.svc.getTask(listId, id))).filter(
-        (t): t is GraphTodoTask => t !== null,
-      )
-    }
+    const fresh = await this.withSteps(
+      listId,
+      delta.changed.filter((t) => !pending.tasks.has(t.id!)),
+    )
 
     const { db } = this
     await db.transaction('rw', [db.tasks, db.attachments, db.outbox, db.meta], async () => {
@@ -523,6 +516,26 @@ export class SyncEngine {
       }
       await db.setMeta(key, delta.deltaLink)
     })
+  }
+
+  /**
+   * Delta items normally include their (expanded) steps. Should Graph ever return items without a
+   * `checklistItems` collection, re-read those tasks so local steps aren't wiped.
+   */
+  private async withSteps(listId: string, tasks: GraphTodoTask[]): Promise<GraphTodoTask[]> {
+    const missing = tasks.filter((t) => !Array.isArray(t.checklistItems)).map((t) => t.id!)
+    if (missing.length === 0) return tasks
+    let refetched: GraphTodoTask[]
+    if (missing.length > PER_TASK_FETCH_LIMIT) {
+      const wanted = new Set(missing)
+      refetched = (await this.svc.getTasks(listId)).filter((t) => wanted.has(t.id!))
+    } else {
+      refetched = (await mapLimit(missing, 4, (id) => this.svc.getTask(listId, id))).filter(
+        (t): t is GraphTodoTask => t !== null,
+      )
+    }
+    const byId = new Map(refetched.map((t) => [t.id!, t]))
+    return tasks.flatMap((t) => (Array.isArray(t.checklistItems) ? [t] : byId.has(t.id!) ? [byId.get(t.id!)!] : []))
   }
 
   private async replaceListTasks(listId: string, server: GraphTodoTask[]) {

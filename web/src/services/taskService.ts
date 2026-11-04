@@ -118,9 +118,12 @@ export class TaskService {
    * round (which returns every task and a deltaLink to continue from).
    */
   async tasksDelta(listId: string, deltaLink?: string): Promise<DeltaResult<TodoTask>> {
-    const first = (await this.api(deltaLink ?? `/me/todo/lists/${enc(listId)}/tasks/delta`).get()) as Page<
-      Removable<TodoTask>
-    >
+    // $expand is honoured by delta and carried over in the deltaLink, so changed tasks arrive with
+    // their steps (verified against the live API, see docs/graph-api-notes.md).
+    const first = (await (deltaLink
+      ? this.api(deltaLink)
+      : this.api(`/me/todo/lists/${enc(listId)}/tasks/delta`).expand(TASK_EXPAND)
+    ).get()) as Page<Removable<TodoTask>>
     const { items, deltaLink: next } = await this.collect(first)
     return splitDelta(items, next)
   }
