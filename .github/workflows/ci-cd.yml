@@ -42,6 +42,13 @@ jobs:
           name: web-dist
           path: web/dist
           retention-days: 7
+      - name: Upload API package
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-deploy
+          path: api/deploy
+          retention-days: 7
 
   secrets-scan:
     name: Secrets scan (gitleaks)
@@ -79,3 +86,29 @@ jobs:
           api_location: ''
           skip_app_build: true
           skip_api_build: true
+
+  deploy-api:
+    name: Deploy API (Azure Functions)
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [verify, secrets-scan]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write # OIDC: federated credential on a user-assigned identity, no stored secrets
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: api-deploy
+          path: api-deploy
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: func-woutist
+          package: api-deploy
+          sku: flexconsumption

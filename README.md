@@ -31,6 +31,10 @@ API (optional, for push): copy `api/local.settings.example.json` to `api/local.s
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
+Demo mode (no sign-in, in-memory fake Graph, dev server only): http://localhost:5173/?demo. Leave it with `?nodemo`.
+
 ## Docs
 
+- [Architecture](docs/architecture.md): data flow, sync, push, where state lives, limitations
+- [Deployment](docs/deployment.md): Azure resources, CI/CD, one-time GitHub setup (`scripts/setup-github.sh`)
 - [Entra app registration](docs/entra-app-registration.md)

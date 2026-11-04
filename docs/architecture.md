@@ -1,0 +1,72 @@
+# Architecture
+
+## Principle: backward compatible with Microsoft To Do
+
+Microsoft Graph is the **only source of truth**. Woutist writes only native To Do fields: title, status, importance, due date, reminder (`isReminderOn` + `reminderDateTime`), recurrence, steps (`checklistItems`), notes (`body`), categories and attachments. Updates are **field-level PATCHes**, so properties Woutist doesn't model are never touched. Stop using Woutist and the official app has everything, including its own reminders.
+
+Everything Woutist keeps for itself is disposable:
+
+| State | Where | Lifetime |
+|---|---|---|
+| Lists, tasks, steps, attachments, reminders | Microsoft Graph | Permanent; the official app sees it |
+| Offline cache + outbox of pending changes | IndexedDB (Dexie), one DB per account: `woutist-<homeAccountId>` | Deleted on sign-out |
+| UI preferences (theme, sort, visible smart lists) | `localStorage`, per account | Deleted on sign-out |
+| Push subscriptions, reminder schedule, timer cursor | Azure Table Storage (Function App's storage account) | Derived from Graph; removable from Settings |
+
+## Web app (`web/`)
+
+```
+src/auth/       MSAL.js (redirect flow + v5 redirect bridge page), AuthAdapter seam (web now, Capacitor later)
+src/models/     Domain types + Graph mappers, time-zone helpers, smart lists, presets (pure, unit-tested)
+src/services/   TaskService (Graph SDK), Dexie DB, repository (optimistic writes + outbox), sync engine, push client
+src/ui/         Fluent UI v9 components (shell, sidebar, task list, details, settings)
+src/platform/   PWA glue (update/install prompts, service worker messages)
+src/sw.ts       Service worker: precache, offline navigation, push + notification clicks
+src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, Graph console probe
+```
+
+### Data flow
+
+1. The UI reads **only from IndexedDB** through live queries (`dexie-react-hooks`), so it works offline and updates instantly.
+2. User actions go through `TodoRepository`. It applies the change locally and appends an op to the **outbox**, in one transaction.
+3. `SyncEngine` pushes the outbox **in order**:
+   - New entities have `tmp_` ids. On creation the id is remapped everywhere (rows, queued ops, the URL via `alias:` meta).
+   - Network, 429 and 5xx failures back off exponentially.
+   - A 404 drops the local entity.
+   - Other 4xx responses drop the op and restore the server's version.
+4. Pull:
+   - Lists are read in full.
+   - Tasks use **delta queries** per list. Changed tasks are re-read with `$expand=checklistItems,linkedResources`, because delta doesn't include steps.
+   - A full refresh runs on first sync and every 6 hours.
+   - **Server data never overwrites an entity with unsynced local changes.**
+5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change.
+
+### Dates and time zones
+
+Reads send `Prefer: outlook.timezone="<browser IANA zone>"`. Due dates are calendar dates (`YYYY-MM-DD`) in the user's zone. Reminders are absolute instants. Writes send local wall time plus the IANA zone. Values written by other clients in other zones (including UTC) are converted correctly.
+
+## Reminder push (`api/`)
+
+Graph can't notify a browser at a reminder's time, and SPA refresh tokens can't be used by a server. Woutist therefore runs a small **scheduler that never touches Graph**:
+
+1. After each sync, a device with notifications on sends the full set of upcoming reminders as ids and times only (`PUT /api/reminders`, a reconcile). It also sends its Web Push subscription.
+2. A timer function (every minute) sends a Web Push for due reminders.
+3. The service worker looks up the task title in IndexedDB and shows the notification. "Complete" opens the app and completes the task there.
+
+Requests carry an access token for `api://<clientId>/Reminders.ReadWrite`. It's validated with `jose` against the Entra JWKS (audience, issuer per tenant, scope, optional allowlist). All data is partitioned by `tid_oid`.
+
+The API runs on a **standalone Flex Consumption Function App**. SWA "bring your own functions" was rejected for four reasons: it needs the Standard plan, doesn't list Flex Consumption, doesn't document whether custom bearer tokens pass through, and the timer works the same either way.
+
+## Known limitations
+
+- Not exposed by Graph: **My Day**, list groups, manual task order, "Assigned to me" (Planner), list sharing management (`isShared` is shown only).
+- **Move to another list** is create + delete. The task gets a new id and creation date, and attachments are copied.
+- **Duplicate notifications** while the official To Do app is installed next to Woutist (both fire).
+- Woutist pushes cover reminders that some Woutist device has synced. A task completed elsewhere before that sync can still produce one stale (labelled) notification. The official app's reminders are unaffected.
+- Work/school tenants that only allow consent for verified publishers need an admin to approve the app.
+
+## Android (next phase)
+
+1. The PWA already installs on Android and receives push reminders.
+2. Capacitor wrap: `web/` is the Capacitor web dir. Implement an `AuthAdapter` with MSAL Android (or a Capacitor MSAL plugin) and register an `msauth://` redirect (see `entra-app-registration.md`). Swap Web Push for FCM if native notifications are needed.
+3. Home-screen widgets need the Capacitor/native shell.
