@@ -35,7 +35,7 @@ import { useMediaQuery } from '../../app/theme'
 import type { SmartListId } from '../../models/views'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { NotificationSettings } from '../settings/NotificationSettings'
-import { PwaUpdatePrompt, useServiceWorkerNavigation } from '../../platform/pwa'
+import { useServiceWorkerNavigation } from '../../platform/pwa'
 import { useInAppReminders } from './useInAppReminders'
 import { Sidebar } from '../sidebar/Sidebar'
 import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
@@ -181,7 +181,6 @@ export function AppShell() {
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} extra={<NotificationSettings />} />
       <Toaster toasterId="app" position="bottom" />
-      <PwaUpdatePrompt />
       <SyncErrorToasts />
     </div>
   )
