@@ -8,6 +8,9 @@ async function bootstrap() {
 
   if (import.meta.env.DEV && (await import('./dev/demo')).isDemoRequested()) {
     const { createDemoAuth } = await import('./dev/demo')
+    // The fake Graph is re-seeded on every load, so the local cache must start empty too.
+    const { deleteAccountDb } = await import('./services/db')
+    await deleteAccountDb('demo')
     auth = (
       <StaticAuthProvider adapter={createDemoAuth()}>
         <App />

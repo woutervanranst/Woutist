@@ -17,6 +17,7 @@ import { ArrowSortRegular } from '@fluentui/react-icons/svg/arrow-sort'
 import { ChevronDownRegular } from '@fluentui/react-icons/svg/chevron-down'
 import { ChevronRightRegular } from '@fluentui/react-icons/svg/chevron-right'
 import { CircleRegular } from '@fluentui/react-icons/svg/circle'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useServices } from '../../app/AppServices'
 import type { Task, TaskChanges } from '../../models/todo'
@@ -40,6 +41,7 @@ import {
   useLists,
   usePendingTaskIds,
   useSelectedTask,
+  useSyncStatus,
 } from '../hooks'
 import { TaskRow } from './TaskRow'
 
@@ -49,6 +51,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     height: '100%',
     minHeight: 0,
+    minWidth: 0,
     backgroundColor: tokens.colorNeutralBackground3,
   },
   header: {
@@ -63,6 +66,7 @@ const useStyles = makeStyles({
   list: {
     flex: 1,
     overflowY: 'auto',
+    overflowX: 'hidden',
     padding: `0 ${tokens.spacingHorizontalXL} ${tokens.spacingVerticalXXL}`,
   },
   section: {
@@ -94,7 +98,8 @@ interface Props {
 
 export function TaskListView({ view }: Props) {
   const styles = useStyles()
-  const { repo } = useServices()
+  const { repo, db } = useServices()
+  const sync = useSyncStatus()
   const lists = useLists()
   const tasks = useAllTasks()
   const categories = useCategories()
@@ -105,6 +110,15 @@ export function TaskListView({ view }: Props) {
   const [deleting, setDeleting] = useState<Task | null>(null)
   const addRef = useRef<HTMLInputElement>(null)
   const key = viewKey(view)
+
+  // Has this list (or, for smart views, anything) finished its first sync on this device?
+  const everSynced = useLiveQuery(
+    async () =>
+      view.kind === 'list'
+        ? Boolean(await db.getMeta(`delta:tasks:${view.listId}`)) || view.listId.startsWith('tmp_')
+        : (await db.meta.filter((m) => m.key.startsWith('delta:tasks:')).count()) > 0,
+    [db, view.kind === 'list' ? view.listId : view.kind],
+  )
 
   const listsById = useMemo(() => new Map((lists ?? []).map((l) => [l.id, l])), [lists])
   const defaultList = lists?.find((l) => l.wellknownListName === 'defaultList')
@@ -283,7 +297,16 @@ export function TaskListView({ view }: Props) {
               </CompletedSection>
             )}
 
-        {open.length === 0 && completed.length === 0 && (
+        {open.length === 0 && completed.length === 0 && everSynced === false && (
+          <div className={styles.empty}>
+            {sync.state === 'error' || sync.state === 'offline' ? (
+              `Couldn't load your tasks yet${sync.error ? `: ${sync.error}` : '.'}`
+            ) : (
+              <Spinner size="small" label="Loading your tasks from Microsoft To Do…" />
+            )}
+          </div>
+        )}
+        {open.length === 0 && completed.length === 0 && everSynced === true && (
           <div className={styles.empty}>
             {view.kind === 'search'
               ? 'No tasks match your search.'

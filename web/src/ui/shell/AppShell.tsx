@@ -46,7 +46,10 @@ const useStyles = makeStyles({
   root: {
     height: '100dvh',
     display: 'grid',
-    gridTemplateRows: 'auto 1fr',
+    gridTemplateRows: 'auto minmax(0, 1fr)',
+    // Without an explicit minmax(0, …) column the grid grows to the widest unbreakable content
+    // (long URL titles, the header's controls) and the page overflows the viewport.
+    gridTemplateColumns: 'minmax(0, 1fr)',
     backgroundColor: tokens.colorNeutralBackground3,
   },
   header: {
@@ -54,14 +57,21 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
     height: '48px',
+    minWidth: 0,
     padding: `0 ${tokens.spacingHorizontalS}`,
     backgroundColor: tokens.colorBrandBackground,
     color: tokens.colorNeutralForegroundOnBrand,
   },
-  brand: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400, padding: `0 ${tokens.spacingHorizontalS}` },
-  search: { flex: 1, maxWidth: '420px', margin: '0 auto' },
-  headerButton: { color: tokens.colorNeutralForegroundOnBrand, minWidth: '32px' },
-  body: { display: 'flex', minHeight: 0 },
+  brand: {
+    flexShrink: 0,
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: tokens.fontSizeBase400,
+    padding: `0 ${tokens.spacingHorizontalS}`,
+    '@media (max-width: 480px)': { display: 'none' },
+  },
+  search: { flex: '1 1 0', minWidth: 0, maxWidth: '420px', margin: '0 auto' },
+  headerButton: { color: tokens.colorNeutralForegroundOnBrand, minWidth: '32px', flexShrink: 0 },
+  body: { display: 'flex', minHeight: 0, minWidth: 0, overflow: 'hidden' },
   sidebar: { width: '280px', flexShrink: 0, borderRight: `1px solid ${tokens.colorNeutralStroke2}` },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
   detail: { width: '380px', flexShrink: 0, borderLeft: `1px solid ${tokens.colorNeutralStroke2}`, minHeight: 0 },
@@ -244,7 +254,7 @@ function SearchField({ inputRef }: { inputRef: React.RefObject<HTMLInputElement 
       placeholder="Search"
       aria-label="Search tasks"
       value={value}
-      style={{ width: '100%', maxWidth: 'none' }}
+      style={{ width: '100%', maxWidth: 'none', minWidth: 0 }}
       onChange={(_, d) => {
         setValue(d.value)
         if (d.value.trim()) {
@@ -325,7 +335,7 @@ function AccountMenu() {
   return (
     <Menu>
       <MenuTrigger disableButtonEnhancement>
-        <Button appearance="transparent" aria-label="Account" style={{ minWidth: 32 }}>
+        <Button appearance="transparent" aria-label="Account" style={{ minWidth: 32, flexShrink: 0 }}>
           <Avatar size={28} name={account?.name ?? account?.username} image={photo ? { src: photo } : undefined} />
         </Button>
       </MenuTrigger>

@@ -32,6 +32,10 @@ function seed(fake: FakeGraph) {
 
   fake.addTask(tasks, { title: 'Renew passport', importance: 'high', dueDateTime: due(-2) })
   fake.addTask(tasks, {
+    title: 'https://learn.microsoft.com/en-us/graph/api/resources/todo-overview?view=graph-rest-1.0&tabs=http#long-unbreakable-url',
+    dueDateTime: due(1),
+  })
+  fake.addTask(tasks, {
     title: 'Call the plumber',
     dueDateTime: due(0),
     reminderDateTime: at(0, '17:00'),
