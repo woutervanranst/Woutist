@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "lint": "oxlint",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "TZ=Europe/Brussels vitest run",
+    "test:watch": "TZ=Europe/Brussels vitest"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.27.0",
@@ -28,7 +28,8 @@
     "workbox-core": "^7.4.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",
-    "workbox-window": "^7.4.1"
+    "workbox-window": "^7.4.1",
+    "@woutist/contracts": "*"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.43.1",

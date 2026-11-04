@@ -1,20 +1,39 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/redirect.html", "/sw.js", "/workbox-*.js", "/manifest.webmanifest", "/*.{png,svg,ico,webmanifest,json,txt}"]
+    "exclude": [
+      "/assets/*",
+      "/redirect.html",
+      "/sw.js",
+      "/workbox-*.js",
+      "/manifest.webmanifest",
+      "/*.{png,svg,ico,webmanifest,json,txt}"
+    ]
   },
   "routes": [
     {
+      "route": "/redirect.html",
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
       "route": "/sw.js",
-      "headers": { "Cache-Control": "no-cache" }
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
     },
     {
       "route": "/index.html",
-      "headers": { "Cache-Control": "no-cache" }
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
     },
     {
       "route": "/assets/*",
-      "headers": { "Cache-Control": "public, max-age=31536000, immutable" }
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
     }
   ],
   "globalHeaders": {

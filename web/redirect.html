@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signing in…</title>
+  </head>
+  <body>
+    <!--
+      MSAL v5 redirect bridge: receives the auth response from Entra and hands it back to the
+      app window (BroadcastChannel for popup/silent flows, sessionStorage + navigate for redirects).
+      Must be bundled from our own origin, served with Cache-Control: no-store and without COOP.
+    -->
+    <script type="module" src="/src/auth/redirectBridge.ts"></script>
+  </body>
+</html>
