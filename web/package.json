@@ -51,7 +51,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "fake-indexeddb": "^6.2.7",
     "jsdom": "^29.1.1",
-    "msw": "^2.15.0",
+    "msw": "^3.0.3",
     "oxlint": "^1.89.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.5",
