@@ -51,6 +51,12 @@ const useStyles = makeStyles({
     // (long URL titles, the header's controls) and the page overflows the viewport.
     gridTemplateColumns: 'minmax(0, 1fr)',
     backgroundColor: tokens.colorNeutralBackground3,
+    // Keep content clear of the status/navigation bars when drawn edge-to-edge (Android app).
+    boxSizing: 'border-box',
+    paddingTop: 'env(safe-area-inset-top, 0px)',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    paddingLeft: 'env(safe-area-inset-left, 0px)',
+    paddingRight: 'env(safe-area-inset-right, 0px)',
   },
   header: {
     display: 'flex',

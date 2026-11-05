@@ -2,6 +2,7 @@ import { Button, Caption1, Divider, Subtitle2, Switch, makeStyles, tokens } from
 import { useState, useSyncExternalStore } from 'react'
 import { useServices } from '../../app/AppServices'
 import { useInstallPrompt } from '../../platform/pwa'
+import { isNative } from '../../platform/native'
 import { PushController } from '../../services/push/pushController'
 
 const useStyles = makeStyles({
@@ -9,6 +10,11 @@ const useStyles = makeStyles({
 })
 
 export function NotificationSettings() {
+  // The Android app has its own notification settings (native reminders).
+  return isNative ? null : <WebNotificationSettings />
+}
+
+function WebNotificationSettings() {
   const styles = useStyles()
   const { push } = useServices()
   const install = useInstallPrompt()
