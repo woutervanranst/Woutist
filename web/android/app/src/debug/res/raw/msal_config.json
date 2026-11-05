@@ -1,0 +1,14 @@
+{
+  "client_id": "ef5e6e64-2019-41a7-8b29-35ef15b28c5f",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "msauth://com.wouteronarchitecture.woutist.debug/EQNF0Qzd3Er%2BQorZfszmb7t5mVU%3D",
+  "broker_redirect_uri_registered": true,
+  "account_mode": "SINGLE",
+  "authorities": [
+    {
+      "type": "AAD",
+      "audience": { "type": "AzureADandPersonalMicrosoftAccount", "tenant_id": "common" },
+      "default": true
+    }
+  ]
+}

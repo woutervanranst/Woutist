@@ -16,6 +16,14 @@ async function bootstrap() {
         <App />
       </StaticAuthProvider>
     )
+  } else if ((await import('./platform/native')).isNative) {
+    // Android app: native MSAL (system browser / Authenticator), not MSAL.js redirects.
+    const { NativeAuthProvider } = await import('./auth/nativeAuth')
+    auth = (
+      <NativeAuthProvider>
+        <App />
+      </NativeAuthProvider>
+    )
   } else {
     const { initMsal } = await import('./auth/msal')
     const msal = await initMsal()

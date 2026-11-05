@@ -1,0 +1,110 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+// Jetpack Glance (the home-screen widget) is written with Compose.
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+android {
+    namespace = "com.wouteronarchitecture.woutist"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.wouteronarchitecture.woutist"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // CI sets these for releases (run number, and the tag without "android-v").
+        versionCode = (System.getenv('WOUTIST_VERSION_CODE') ?: '1').toInteger()
+        versionName = System.getenv('WOUTIST_VERSION_NAME') ?: '0.0.0-dev'
+        // MSAL redirect: msauth://<applicationId>/<signature hash>. The hash belongs to the signing key.
+        manifestPlaceholders = [msalSignatureHash: "set-per-build-type"]
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Release signing comes from the environment (CI secrets, or the owner's Mac); never from the repo.
+    def keystorePath = System.getenv('WOUTIST_KEYSTORE_PATH')
+    def releaseSigning = keystorePath && System.getenv('WOUTIST_KEYSTORE_PASSWORD') &&
+        System.getenv('WOUTIST_KEY_ALIAS') && System.getenv('WOUTIST_KEY_PASSWORD')
+    signingConfigs {
+        if (releaseSigning) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('WOUTIST_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('WOUTIST_KEY_ALIAS')
+                keyPassword System.getenv('WOUTIST_KEY_PASSWORD')
+            }
+        }
+    }
+    buildFeatures {
+        compose = true
+    }
+    compileOptions {
+        // java.time (reminders, Graph dates) on Android 7 (minSdk 24) through core library desugaring.
+        coreLibraryDesugaringEnabled true
+    }
+    testOptions {
+        // Local unit tests run on the JVM: android.util.Log and friends return defaults instead of throwing.
+        unitTests.returnDefaultValues = true
+    }
+    buildTypes {
+        debug {
+            // "Woutist dev" installs next to the release app, so testing never wipes the daily install.
+            applicationIdSuffix ".debug"
+            resValue "string", "app_name", "Woutist dev"
+            // Debug keystore on the owner's Mac (~/.android/debug.keystore).
+            manifestPlaceholders = [msalSignatureHash: "EQNF0Qzd3Er+QorZfszmb7t5mVU="]
+        }
+        release {
+            resValue "string", "app_name", "Woutist"
+            // Release keystore (~/.woutist on the owner's Mac, ANDROID_KEYSTORE_* secrets in CI).
+            manifestPlaceholders = [msalSignatureHash: "EYzsp39WW7UlHrR5kTI6uzLtDkQ="]
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseSigning) signingConfig signingConfigs.release
+        }
+    }
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+android.sourceSets.test.resources.srcDirs += '../../src/native/__fixtures__' 
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    implementation "com.microsoft.identity.client:msal:8.6.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
+    implementation "androidx.work:work-runtime-ktx:2.12.0"
+    implementation "androidx.glance:glance-appwidget:1.2.0"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
+    implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    testImplementation "junit:junit:$junitVersion"
+    // Android's org.json is a stub in local unit tests; use the real one there.
+    testImplementation "org.json:json:20250517"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

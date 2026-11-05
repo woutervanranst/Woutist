@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon: "Add a task". The package differs per build type (debug build: Woutist dev). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutId="add_task"
+        android:shortcutShortLabel="@string/shortcut_add_short"
+        android:shortcutLongLabel="@string/shortcut_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.wouteronarchitecture.woutist.quickadd.QuickAddActivity"
+            android:targetPackage="com.wouteronarchitecture.woutist.debug" />
+    </shortcut>
+</shortcuts>

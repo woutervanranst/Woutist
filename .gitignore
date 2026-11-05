@@ -31,3 +31,8 @@ npm-debug.log*
 !.vscode/extensions.json
 .idea/
 .DS_Store
+
+# Android: local SDK path, signing keys (release keystore lives outside the repo)
+web/android/local.properties
+*.jks
+*.keystore

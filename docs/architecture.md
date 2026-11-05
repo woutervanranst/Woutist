@@ -16,7 +16,7 @@ Everything Woutist keeps for itself is disposable:
 ## Web app (`web/`)
 
 ```
-src/auth/       MSAL.js (redirect flow + v5 redirect bridge page), AuthAdapter seam (web now, Capacitor later)
+src/auth/       MSAL.js (redirect flow + v5 redirect bridge page); AuthAdapter seam, MSAL Android on the phone (nativeAuth.tsx)
 src/models/     Domain types + Graph mappers, time-zone helpers, smart lists, presets (pure, unit-tested)
 src/services/   TaskService (Graph SDK), Dexie DB, repository (optimistic writes + outbox), sync engine, push client
 src/ui/         Fluent UI v9 components (shell, sidebar, task list, details, settings)
@@ -61,14 +61,34 @@ The API runs on a **standalone Flex Consumption Function App**. SWA "bring your 
 
 - Not exposed by Graph: **My Day**, list groups, manual task order, "Assigned to me" (Planner), list sharing management (`isShared` is shown only).
 - **Move to another list** is create + delete. The task gets a new id and creation date, and attachments are copied.
-- **Duplicate notifications** while the official To Do app is installed next to Woutist (both fire).
+- **Duplicate notifications** while the official To Do app is installed next to Woutist (both fire). On a phone with both Woutist builds and the official app, one reminder can notify up to three times (Woutist, Woutist dev, To Do).
 - **Official phone app and short-notice reminders.** The official To Do phone app schedules reminders on the phone and fires only those it has synced. Changes made in Microsoft's own apps reach the phone within a minute. Changes made through Graph (Woutist, or any other third-party app) reach it only when it next syncs, for example when it's opened. A reminder set in Woutist one minute ahead does not fire in the official app unless it's opened first; it fires correctly once the app has synced (tested 2026-11-05). Woutist's own push covers this while Woutist is in use.
 - Woutist pushes cover reminders that some Woutist device has synced. A task completed elsewhere before that sync can still produce one stale (labelled) notification. The official app's reminders are unaffected.
 - Work/school tenants that only allow consent for verified publishers need an admin to approve the app.
 - **Brave** turns off Google's push service by default, so turning on reminders fails with "Registration failed - push service error". Fix: turn on *Use Google services for push messaging* in `brave://settings/privacy` and restart Brave. Settings shows this hint.
 
-## Android (next phase)
+## Android app (`web/android`)
 
-1. The PWA already installs on Android and receives push reminders.
-2. Capacitor wrap: `web/` is the Capacitor web dir. Implement an `AuthAdapter` with MSAL Android (or a Capacitor MSAL plugin) and register an `msauth://` redirect (see `entra-app-registration.md`). Swap Web Push for FCM if native notifications are needed.
-3. Home-screen widgets need the Capacitor/native shell.
+The same React app runs in a Capacitor 8 shell. Two builds install side by side: **Woutist** (release, `com.wouteronarchitecture.woutist`) and **Woutist dev** (debug, `….debug`). On the phone (`isNative`):
+
+- **Sign-in** is MSAL Android in single-account mode, through Microsoft Authenticator when installed (`WoutistAuth` plugin behind the `AuthAdapter` seam). Graph tokens are silent, with one shared interactive prompt when MSAL needs it.
+- **No Web Push.** Reminders are scheduled on the phone instead.
+
+**Snapshot bridge.** After local changes (debounced 1 s) the app pushes a compact snapshot to native code (`WoutistNative.setSnapshot`): lists, open tasks with server ids (title, star, due date, reminder instant, recurring), sort preferences, and whether the outbox still holds unsent changes. Native code keeps it in files (`SnapshotStore`) plus its own **pending operations** (complete, create) made from notifications, the widget or quick add. Its view is the snapshot with those operations applied.
+
+**Reminders.** One alarm per upcoming reminder, with the same rules as Web Push (open tasks, reminder on, from now − 60 s to 90 days ahead, at most 1000; JS and Kotlin are checked against one fixture). They're **alarm-clock alarms** (`setAlarmClock`), like the official app: OxygenOS stretched even exact alarms into a window of 75% of the lead time. Without the exact-alarm permission they fall back to inexact alarms. A notification only appears if the task is still open in the latest snapshot. It offers **Complete** (queued to Graph) and **Snooze** (10 minutes, on the phone only, never written to Graph). Alarms are re-armed after a reboot, an app update, a time-zone change, an exact-alarm permission change, and on every app start (a force-stop clears them).
+
+**Native operations** go to Graph through WorkManager (`TaskOpWorker`, network required, exponential backoff). A 404 drops the operation (the task is gone). "Sign-in required" keeps it and flags the account, and it is retried as soon as the app sends a snapshot again.
+
+**Background refresh.** `RefreshWorker` reads lists and open tasks from Graph every 30 minutes (Android may stretch this) and right after a native operation, so reminders set in the official app or on the web get armed while Woutist is closed. It leaves the snapshot alone while the app has unsent changes, or if the app pushed a newer one during the fetch.
+
+**Widget and quick add.** A Glance widget shows a list, Important or Planned in the app's sort order (same rules as `widgetTasks`, checked against a shared fixture). Ticking completes a task; tapping opens it. Its "+", the app icon's **Add a task** shortcut and **Share to Woutist** open a small dialog over the home screen. Like the official app, the dialog can set a due date and a reminder (the app's presets: today, tomorrow, next week, later today, or a picked date and time). A task added from Important is starred; one added from Planned starts due today.
+
+**Settings** show whether notifications, exact reminders and unrestricted background activity are allowed, with a button for each. A banner asks to fix them while reminders are pending.
+
+### Android limitations
+
+- **Snooze is local.** Other devices and the official app don't know about it.
+- **Battery managers (OnePlus and others)** can delay background refresh. Reminders already on the phone fire on time (alarm clocks), but a reminder set elsewhere may only arrive at the next refresh or app start. Allowing background activity helps.
+- **Work and school accounts** are best effort: no Intune app protection (MAM) support, and tenants may require admin consent.
+- The widget and notifications show what the phone last synced. A change made elsewhere shows after the next refresh.

@@ -2,13 +2,20 @@ import { Button, Caption1, Divider, Subtitle2, Switch, makeStyles, tokens } from
 import { useState, useSyncExternalStore } from 'react'
 import { useServices } from '../../app/AppServices'
 import { useInstallPrompt } from '../../platform/pwa'
+import { isNative } from '../../platform/native'
 import { PushController } from '../../services/push/pushController'
+import { NativeNotificationSettings } from './NativeNotificationSettings'
 
 const useStyles = makeStyles({
   section: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS, margin: `${tokens.spacingVerticalL} 0` },
 })
 
 export function NotificationSettings() {
+  // The Android app schedules reminders natively; browsers use Web Push.
+  return isNative ? <NativeNotificationSettings /> : <WebNotificationSettings />
+}
+
+function WebNotificationSettings() {
   const styles = useStyles()
   const { push } = useServices()
   const install = useInstallPrompt()

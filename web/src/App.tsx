@@ -3,6 +3,8 @@ import { BrowserRouter } from 'react-router'
 import { AppServicesProvider } from './app/AppServices'
 import { useResolvedTheme } from './app/theme'
 import { AuthGate } from './auth/AuthGate'
+import { isNative } from './platform/native'
+import { AndroidBackHandler } from './platform/androidBack'
 import { PwaUpdatePrompt } from './platform/pwa'
 import { useAccountPrefs } from './ui/hooks'
 import { AppShell } from './ui/shell/AppShell'
@@ -24,9 +26,11 @@ export default function App() {
   const { theme } = useResolvedTheme('system')
   return (
     <FluentProvider theme={theme} style={fill}>
-      {/* Registers the service worker at start-up (offline shell, installability) even before sign-in. */}
-      <PwaUpdatePrompt />
+      {/* Registers the service worker at start-up (offline shell, installability) even before sign-in.
+          Not in the Android app: it ships its own assets and handles reminders natively. */}
+      {!isNative && <PwaUpdatePrompt />}
       <BrowserRouter>
+        <AndroidBackHandler />
         <AuthGate>
           <AppServicesProvider>
             <AccountApp />

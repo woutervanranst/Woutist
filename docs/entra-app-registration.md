@@ -1,6 +1,6 @@
 # Entra app registration: Woutist
 
-One registration serves every platform (web SPA, PWA, and the Android wrapper later). It's also the audience for Woutist's own reminder API.
+One registration serves every platform (web SPA, PWA, and the Android app). It's also the audience for Woutist's own reminder API.
 
 | Item | Value |
 |---|---|
@@ -23,6 +23,26 @@ The client ID and tenant ID aren't secrets; they end up in the JavaScript bundle
 - `https://proud-moss-0d9caa003.5.azurestaticapps.net` and `https://proud-moss-0d9caa003.5.azurestaticapps.net/redirect.html` (production, default `swa-woutist` host)
 
 `/redirect.html` is a blank page that MSAL uses as the `redirectUri` for popup and silent token requests.
+
+## Redirect URIs (platform: Mobile and desktop applications, Android)
+
+MSAL Android signs in with `msauth://<package>/<url-encoded signature hash>`. Each signing key has its own hash:
+
+| Build | Package | Redirect URI |
+|---|---|---|
+| Woutist (release, CI keystore) | `com.wouteronarchitecture.woutist` | `msauth://com.wouteronarchitecture.woutist/EYzsp39WW7UlHrR5kTI6uzLtDkQ%3D` |
+| Woutist dev (debug, owner's `~/.android/debug.keystore`) | `com.wouteronarchitecture.woutist.debug` | `msauth://com.wouteronarchitecture.woutist.debug/EQNF0Qzd3Er%2BQorZfszmb7t5mVU%3D` |
+
+The same values live in `web/android/app/src/{debug,release}/res/raw/msal_config.json` (URL-encoded) and in `app/build.gradle` (`msalSignatureHash`, raw). All of them are public.
+
+Compute a hash (the debug keystore password is `android`):
+
+```bash
+keytool -exportcert -alias androiddebugkey -keystore ~/.android/debug.keystore | openssl sha1 -binary | openssl base64
+keytool -exportcert -alias woutist -keystore ~/.woutist/woutist-release.jks | openssl sha1 -binary | openssl base64
+```
+
+A new debug machine or a rotated release key means a new hash: add its redirect URI (below) and update both files.
 
 ## Permissions (delegated)
 
@@ -49,9 +69,10 @@ az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$OBJ
   --headers Content-Type=application/json \
   --body '{"spa":{"redirectUris":["http://localhost:5173","http://localhost:5173/redirect.html","https://<swa-host>","https://<swa-host>/redirect.html"]}}'
 
-# Android (Capacitor + MSAL Android/broker): add a public-client redirect
-#   msauth://<android-package-name>/<url-encoded-base64-signature-hash>
-az ad app update --id $APPID --public-client-redirect-uris "msauth://<package>/<hash>"
+# Android redirect URIs (PATCH replaces the whole list, so always send every URI)
+az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$OBJ" \
+  --headers Content-Type=application/json \
+  --body '{"publicClient":{"redirectUris":["msauth://com.wouteronarchitecture.woutist/<hash>","msauth://com.wouteronarchitecture.woutist.debug/<hash>"]}}'
 
 # Add another Graph delegated scope, e.g. Tasks.ReadWrite.Shared (c5ddf11b-c114-4886-8558-8a4e557cd52b)
 az ad app permission add --id $APPID --api 00000003-0000-0000-c000-000000000000 \

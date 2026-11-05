@@ -17,5 +17,8 @@ Checked against the live API (v1.0) with a personal Microsoft account on 2026-11
 | `/me/photo/$value` without a photo | 404 | Initials avatar |
 | `/me/todo/lists/delta` | Works | Not needed: lists are read in full (one cheap request) |
 | Reminder changed through Graph, official Android app closed (2026-11-05) | Graph has the right time, but the phone app doesn't hear about the change until it syncs. A reminder set 1 minute ahead didn't fire. The same change made on to-do.office.com did fire, and so did the Graph change once the app was opened | Woutist's own push handles short-notice reminders; documented as a known limitation |
+| `GET …/tasks?$filter=status ne 'completed'` (2026-11-05) | Works: only open tasks | The Android app's background refresh reads open tasks only |
+| `GET …/tasks?$select=…` (2026-11-05) | **Any `$select` that includes `title` returns 400 `invalidRequest`**; selects without `title` work | The Android refresh reads full tasks (no `$select`) and maps only what it needs |
+| Optional task fields (`dueDateTime`, `reminderDateTime`, `recurrence`, `completedDateTime`) | Omitted when not set (no key) | Mappers treat a missing key as null |
 
 **Not available in Graph:** My Day, list groups (folders), manual task order, "Assigned to me" (Planner), sharing management.

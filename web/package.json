@@ -11,16 +11,21 @@
     "typecheck": "tsc -b --noEmit",
     "test": "TZ=Europe/Brussels vitest run",
     "test:watch": "TZ=Europe/Brussels vitest",
-    "generate-pwa-assets": "pwa-assets-generator"
+    "generate-pwa-assets": "pwa-assets-generator",
+    "android:sync": "npm run build && cap sync android",
+    "android:run": "npm run android:sync && cd android && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} ./gradlew installDebug && adb shell am start -n com.wouteronarchitecture.woutist.debug/com.wouteronarchitecture.woutist.MainActivity"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.27.0",
     "@azure/msal-react": "^5.7.4",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
     "@fluentui/react-components": "^9.75.1",
     "@fluentui/react-datepicker-compat": "^0.6.40",
     "@fluentui/react-icons": "^2.0.345",
     "@fluentui/react-timepicker-compat": "^0.4.42",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@woutist/contracts": "*",
     "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",
     "react": "^19.3.1",
@@ -29,10 +34,12 @@
     "workbox-core": "^7.4.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",
-    "workbox-window": "^7.4.1",
-    "@woutist/contracts": "*"
+    "workbox-window": "^7.4.1"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.0",
     "@microsoft/microsoft-graph-types": "^2.43.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

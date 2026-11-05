@@ -8,6 +8,9 @@ import { TaskService } from '../services/taskService'
 import { PushApi } from '../services/push/pushApi'
 import { PushController } from '../services/push/pushController'
 import { config, pushEnabled } from '../config'
+import { isNative } from '../platform/native'
+import { NativeBridge } from '../native/nativeBridge'
+import { WoutistNative } from '../native/plugins'
 
 export interface AppServices {
   accountKey: string
@@ -17,6 +20,8 @@ export interface AppServices {
   repo: TodoRepository
   /** Null when the reminder push service isn't configured for this build. */
   push: PushController | null
+  /** The Android app's native side (reminders, widget); null in the browser. */
+  native: NativeBridge | null
 }
 
 const AppServicesContext = createContext<AppServices | null>(null)
@@ -31,7 +36,8 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     const svc = new TaskService(auth.createGraphClient())
     const engine = new SyncEngine(db, svc)
     const repo = new TodoRepository(db, engine.requestFlush)
-    const push = pushEnabled
+    // The Android app schedules reminders natively; Web Push is for browsers only.
+    const push = pushEnabled && !isNative
       ? new PushController({
           db,
           engine,
@@ -40,7 +46,8 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
           accountKey,
         })
       : null
-    return { accountKey, db, svc, engine, repo, push }
+    const native = isNative ? new NativeBridge({ db, engine }, accountKey) : null
+    return { accountKey, db, svc, engine, repo, push, native }
     // The Graph client only depends on the account.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountKey])
@@ -48,7 +55,9 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     services.engine.start()
     services.push?.start()
+    services.native?.start()
     return () => {
+      services.native?.stop()
       services.push?.stop()
       services.engine.stop()
     }
@@ -80,6 +89,9 @@ export function useSignOut(): () => Promise<void> {
     services.engine.stop()
     // This device stops receiving this account's reminders (other devices are unaffected).
     await services.push?.disable().catch(() => {})
+    // The phone forgets the account too: no more alarms, widget data or queued changes.
+    services.native?.stop()
+    if (services.native) await WoutistNative.clear().catch((error) => console.warn('Clearing native data failed', error))
     for (const hook of signOutHooks) {
       try {
         await hook(services)

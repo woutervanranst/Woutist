@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "accountKey": "oid.tid",
+  "generatedAt": "2026-11-05T08:00:00.000Z",
+  "timeZone": "Europe/Brussels",
+  "lists": [
+    { "id": "L1", "name": "Tasks", "wellknownListName": "defaultList" },
+    { "id": "L2", "name": "Groceries", "wellknownListName": "none" }
+  ],
+  "tasks": [
+    { "id": "task-past", "listId": "L1", "title": "An hour ago", "important": false, "dueDate": null, "reminderAt": "2026-11-05T07:00:00.000Z", "createdDateTime": "2026-11-01T10:00:00.000Z", "recurring": false },
+    { "id": "task-grace", "listId": "L1", "title": "Thirty seconds ago", "important": false, "dueDate": null, "reminderAt": "2026-11-05T07:59:30.000Z", "createdDateTime": "2026-11-01T10:00:00.000Z", "recurring": false },
+    { "id": "task-b", "listId": "L1", "title": "Same time, second", "important": true, "dueDate": "2026-11-05", "reminderAt": "2026-11-05T09:00:00.000Z", "createdDateTime": "2026-11-02T10:00:00.000Z", "recurring": false },
+    { "id": "task-a", "listId": "L2", "title": "Same time, first", "important": false, "dueDate": null, "reminderAt": "2026-11-05T09:00:00.000Z", "createdDateTime": "2026-11-02T11:00:00.000Z", "recurring": true },
+    { "id": "task-off", "listId": "L2", "title": "Reminder off", "important": false, "dueDate": "2026-11-06", "reminderAt": null, "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false },
+    { "id": "task-90d", "listId": "L1", "title": "Exactly 90 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-03T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false },
+    { "id": "task-91d", "listId": "L1", "title": "91 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-04T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false }
+  ],
+  "sort": { "list:L1": { "key": "dueDate", "dir": "asc" } },
+  "outboxPending": false
+}

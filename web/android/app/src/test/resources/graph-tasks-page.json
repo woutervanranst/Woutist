@@ -1,0 +1,38 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('synthetic')/todo/lists('L1')/tasks",
+  "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/todo/lists/L1/tasks?$filter=status%20ne%20%27completed%27&$skip=2",
+  "value": [
+    {
+      "@odata.etag": "W/\"synthetic-1\"",
+      "importance": "high",
+      "isReminderOn": true,
+      "status": "notStarted",
+      "title": "Pay the rent",
+      "createdDateTime": "2026-11-01T08:00:00.0000000Z",
+      "lastModifiedDateTime": "2026-11-01T08:00:00.0000000Z",
+      "hasAttachments": false,
+      "categories": [],
+      "id": "T1",
+      "body": { "content": "", "contentType": "text" },
+      "dueDateTime": { "dateTime": "2026-11-06T00:00:00.0000000", "timeZone": "Europe/Brussels" },
+      "reminderDateTime": { "dateTime": "2026-11-06T09:00:00.0000000", "timeZone": "Europe/Brussels" },
+      "recurrence": {
+        "pattern": { "type": "absoluteMonthly", "interval": 1, "month": 0, "dayOfMonth": 6, "firstDayOfWeek": "sunday", "index": "first" },
+        "range": { "type": "noEnd", "startDate": "2026-11-06", "endDate": "0001-01-01", "recurrenceTimeZone": "Europe/Brussels", "numberOfOccurrences": 0 }
+      }
+    },
+    {
+      "@odata.etag": "W/\"synthetic-2\"",
+      "importance": "normal",
+      "isReminderOn": false,
+      "status": "notStarted",
+      "title": "Buy milk",
+      "createdDateTime": "2026-11-02T08:00:00.0000000Z",
+      "lastModifiedDateTime": "2026-11-02T08:00:00.0000000Z",
+      "hasAttachments": false,
+      "categories": [],
+      "id": "T2",
+      "body": { "content": "", "contentType": "text" }
+    }
+  ]
+}
