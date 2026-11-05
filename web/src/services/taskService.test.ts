@@ -8,7 +8,7 @@ const server = setupServer()
 let fake: FakeGraph
 let svc: TaskService
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 beforeEach(() => {
   fake = new FakeGraph()
