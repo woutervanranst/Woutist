@@ -1,5 +1,5 @@
 import type { PatternedRecurrence } from './todo'
-import { addDays, dayOfWeek, todayLocal, zonedWallToInstant, userTimeZone } from './time'
+import { addDays, dayOfWeek, todayLocal } from './time'
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 export type DayName = (typeof DAY_NAMES)[number]
@@ -10,41 +10,6 @@ export function nextMonday(date: string): string {
   const dow = dayOfWeek(date)
   const delta = ((8 - dow) % 7) || 7
   return addDays(date, delta)
-}
-
-export interface DuePreset {
-  id: 'today' | 'tomorrow' | 'nextWeek'
-  label: string
-  date: string
-}
-
-export function duePresets(today: string = todayLocal()): DuePreset[] {
-  return [
-    { id: 'today', label: 'Today', date: today },
-    { id: 'tomorrow', label: 'Tomorrow', date: addDays(today, 1) },
-    { id: 'nextWeek', label: 'Next week', date: nextMonday(today) },
-  ]
-}
-
-export interface ReminderPreset {
-  id: 'laterToday' | 'tomorrow' | 'nextWeek'
-  label: string
-  at: string // ISO instant
-}
-
-/** Reminder presets: later today (+3h, rounded to the hour), tomorrow 9:00, next Monday 9:00. */
-export function reminderPresets(now: Date = new Date(), tz: string = userTimeZone()): ReminderPreset[] {
-  const today = todayLocal(now, tz)
-  const at9 = (date: string) => zonedWallToInstant(`${date}T09:00:00`, tz).toISOString()
-  const presets: ReminderPreset[] = []
-  const later = new Date(now.getTime() + 3 * 3600_000)
-  later.setMinutes(0, 0, 0)
-  if (todayLocal(later, tz) === today) {
-    presets.push({ id: 'laterToday', label: 'Later today', at: later.toISOString() })
-  }
-  presets.push({ id: 'tomorrow', label: 'Tomorrow', at: at9(addDays(today, 1)) })
-  presets.push({ id: 'nextWeek', label: 'Next week', at: at9(nextMonday(today)) })
-  return presets
 }
 
 // ---------- recurrence ----------

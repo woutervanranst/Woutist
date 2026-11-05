@@ -8,7 +8,7 @@ import type {
   User,
 } from '@microsoft/microsoft-graph-types'
 import { userTimeZone } from '../models/time'
-import { isNotFound } from './graphClient'
+import { graphStatus, isNotFound } from './graphClient'
 
 const TASK_EXPAND = 'checklistItems,linkedResources'
 const ATTACHMENT_SELECT = 'id,name,contentType,size,lastModifiedDateTime'
@@ -77,6 +77,35 @@ export class TaskService {
 
   async deleteList(listId: string): Promise<void> {
     await this.api(`/me/todo/lists/${enc(listId)}`).delete()
+  }
+
+  // ---------- open extensions on a list (Woutist's synced settings) ----------
+
+  /** An open extension on a list, by name; null when it doesn't exist. */
+  async getListExtension(listId: string, name: string): Promise<Record<string, unknown> | null> {
+    try {
+      return await this.api(`/me/todo/lists/${enc(listId)}/extensions/${enc(name)}`).get()
+    } catch (error) {
+      if (isNotFound(error)) return null
+      throw error
+    }
+  }
+
+  /** Create or update an open extension on a list. */
+  async saveListExtension(listId: string, name: string, data: Record<string, unknown>, exists: boolean): Promise<void> {
+    const base = `/me/todo/lists/${enc(listId)}/extensions`
+    const body = { '@odata.type': 'microsoft.graph.openTypeExtension', extensionName: name, ...data }
+    const create = () => this.api(base).post(body)
+    const update = () => this.api(`${base}/${enc(name)}`).patch(body)
+    try {
+      await (exists ? update() : create())
+    } catch (error) {
+      // Deleted or created elsewhere since it was read: take the other route once.
+      const status = graphStatus(error)
+      if (exists && status === 404) await create()
+      else if (!exists && status === 409) await update()
+      else throw error
+    }
   }
 
   // ---------- tasks ----------

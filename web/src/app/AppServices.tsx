@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext'
 import { clearPrefs } from './prefs'
 import { deleteAccountDb, openAccountDb, type WoutistDb } from '../services/db'
 import { TodoRepository } from '../services/repository'
+import { SettingsSync } from '../services/settingsSync'
 import { SyncEngine } from '../services/sync/syncEngine'
 import { TaskService } from '../services/taskService'
 import { PushApi } from '../services/push/pushApi'
@@ -18,6 +19,8 @@ export interface AppServices {
   svc: TaskService
   engine: SyncEngine
   repo: TodoRepository
+  /** Saves the settings that follow the user (quick dates, reminder times) to their account. */
+  settings: SettingsSync
   /** Null when the reminder push service isn't configured for this build. */
   push: PushController | null
   /** The Android app's native side (reminders, widget); null in the browser. */
@@ -36,6 +39,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     const svc = new TaskService(auth.createGraphClient())
     const engine = new SyncEngine(db, svc)
     const repo = new TodoRepository(db, engine.requestFlush)
+    const settings = new SettingsSync({ db, svc, engine, accountKey })
     // The Android app schedules reminders natively; Web Push is for browsers only.
     const push = pushEnabled && !isNative
       ? new PushController({
@@ -47,12 +51,13 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
         })
       : null
     const native = isNative ? new NativeBridge({ db, engine }, accountKey) : null
-    return { accountKey, db, svc, engine, repo, push, native }
+    return { accountKey, db, svc, engine, repo, settings, push, native }
     // The Graph client only depends on the account.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountKey])
 
   useEffect(() => {
+    services.settings.start()
     services.engine.start()
     services.push?.start()
     services.native?.start()
@@ -60,6 +65,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
       services.native?.stop()
       services.push?.stop()
       services.engine.stop()
+      services.settings.stop()
     }
   }, [services])
 
@@ -87,6 +93,7 @@ export function useSignOut(): () => Promise<void> {
   const { signOut } = useAuth()
   return async () => {
     services.engine.stop()
+    services.settings.stop()
     // This device stops receiving this account's reminders (other devices are unaffected).
     await services.push?.disable().catch(() => {})
     // The phone forgets the account too: no more alarms, widget data or queued changes.

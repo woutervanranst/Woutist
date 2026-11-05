@@ -15,70 +15,11 @@ import {
 } from '@fluentui/react-components'
 import { useState } from 'react'
 import { type CustomRepeat, type DayName, type RepeatUnit } from '../../models/presets'
-import { instantToZonedWall, todayLocal, zonedWallToInstant, userTimeZone } from '../../models/time'
 
 const useStyles = makeStyles({
   row: { display: 'flex', gap: tokens.spacingHorizontalM, flexWrap: 'wrap' },
   days: { display: 'flex', gap: tokens.spacingHorizontalXS, flexWrap: 'wrap' },
 })
-
-/** Date (and optionally time) picker using native inputs: they're great on Android. */
-export function DateTimeDialog(props: {
-  open: boolean
-  title: string
-  withTime: boolean
-  /** Date (`YYYY-MM-DD`) or instant (ISO) depending on `withTime`. */
-  initial: string | null
-  onSave: (value: string) => void
-  onClose: () => void
-}) {
-  const styles = useStyles()
-  const tz = userTimeZone()
-  const initialWall = props.initial
-    ? props.withTime
-      ? instantToZonedWall(new Date(props.initial), tz)
-      : `${props.initial}T09:00:00`
-    : `${todayLocal()}T09:00:00`
-  const [date, setDate] = useState(initialWall.slice(0, 10))
-  const [time, setTime] = useState(initialWall.slice(11, 16))
-
-  function save() {
-    if (!date) return
-    if (props.withTime) props.onSave(zonedWallToInstant(`${date}T${time || '09:00'}:00`, tz).toISOString())
-    else props.onSave(date)
-    props.onClose()
-  }
-
-  return (
-    <Dialog open={props.open} onOpenChange={(_, d) => !d.open && props.onClose()}>
-      <DialogSurface style={{ maxWidth: 400 }}>
-        <DialogBody>
-          <DialogTitle>{props.title}</DialogTitle>
-          <DialogContent>
-            <div className={styles.row}>
-              <Field label="Date">
-                <Input type="date" value={date} onChange={(_, d) => setDate(d.value)} />
-              </Field>
-              {props.withTime && (
-                <Field label="Time">
-                  <Input type="time" value={time} onChange={(_, d) => setTime(d.value)} />
-                </Field>
-              )}
-            </div>
-          </DialogContent>
-          <DialogActions>
-            <Button appearance="secondary" onClick={props.onClose}>
-              Cancel
-            </Button>
-            <Button appearance="primary" onClick={save} disabled={!date}>
-              Save
-            </Button>
-          </DialogActions>
-        </DialogBody>
-      </DialogSurface>
-    </Dialog>
-  )
-}
 
 const DAYS: { name: DayName; short: string }[] = [
   { name: 'monday', short: 'Mo' },

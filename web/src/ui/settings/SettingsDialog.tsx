@@ -21,6 +21,7 @@ import { useServices } from '../../app/AppServices'
 import type { ThemePref } from '../../app/prefs'
 import { SMART_LISTS } from '../../models/views'
 import { useAccountPrefs } from '../hooks'
+import { DateReminderSettings } from './DateReminderSettings'
 
 const useStyles = makeStyles({
   section: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS, marginBottom: tokens.spacingVerticalL },
@@ -58,6 +59,8 @@ export function SettingsDialog({ open, onClose, extra }: Props) {
                 </RadioGroup>
               </Field>
             </div>
+            <Divider />
+            <DateReminderSettings />
             <Divider />
             <div className={styles.section} style={{ marginTop: 16 }}>
               <Subtitle2>Smart lists</Subtitle2>

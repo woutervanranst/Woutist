@@ -5,7 +5,6 @@ import {
   Input,
   Link,
   Menu,
-  MenuDivider,
   MenuItem,
   MenuItemCheckbox,
   MenuList,
@@ -41,21 +40,14 @@ import { useServices } from '../../app/AppServices'
 import type { Step, Task } from '../../models/todo'
 import { isTempId } from '../../models/todo'
 import { todayLocal } from '../../models/time'
-import {
-  type RepeatPreset,
-  buildRecurrence,
-  describeRecurrence,
-  duePresets,
-  formatDate,
-  formatFileSize,
-  formatReminder,
-  recurrencePreset,
-  reminderPresets,
-} from '../../models/presets'
+import { describeRecurrence, formatDate, formatFileSize, formatReminder } from '../../models/presets'
+import { reminderLabel } from '../../models/dateReminder'
 import { categoryColor } from '../common/categoryColors'
 import { ConfirmDialog } from '../common/ConfirmDialog'
-import { useAccountPrefs, useAttachments, useCategories, useTask } from '../hooks'
-import { CustomRepeatDialog, DateTimeDialog } from './pickers'
+import { RepeatMenu } from '../dates/RepeatMenu'
+import { useDateEditor } from '../dates/useDateEditor'
+import { useDatePicker } from '../dates/useDatePicker'
+import { useAccountPrefs, useAttachments, useCategories, useCompactLayout, useTask } from '../hooks'
 
 const useStyles = makeStyles({
   root: {
@@ -93,6 +85,15 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightRegular,
   },
   actionSet: { color: tokens.colorBrandForeground1 },
+  actionText: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, textAlign: 'left' },
+  actionSub: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: tokens.fontSizeBase200,
+    lineHeight: tokens.lineHeightBase200,
+    color: tokens.colorNeutralForeground3,
+  },
   actionRow: { display: 'flex', alignItems: 'center' },
   chipRow: { display: 'flex', flexWrap: 'wrap', gap: tokens.spacingHorizontalXS, padding: `0 ${tokens.spacingHorizontalM} ${tokens.spacingVerticalS}` },
   chip: {
@@ -169,9 +170,7 @@ function TaskDetails({ task, onClose }: { task: Task; onClose: () => void }) {
         </div>
 
         <div className={styles.card}>
-          <ReminderAction task={task} onChange={update} />
-          <Divider />
-          <DueAction task={task} onChange={update} />
+          <DateReminderAction task={task} />
           <Divider />
           <RepeatAction task={task} onChange={update} />
         </div>
@@ -376,145 +375,79 @@ function StepRow({ task, step }: { task: Task; step: Step }) {
 
 type OnChange = (changes: Parameters<ReturnType<typeof useServices>['repo']['updateTask']>[1]) => void
 
-function ActionButton(props: {
-  icon: React.ReactElement
-  label: string
-  isSet: boolean
-  onClear?: () => void
-}) {
+function DateReminderAction({ task }: { task: Task }) {
   const styles = useStyles()
+  const editor = useDateEditor(task)
+  const picker = useDatePicker(task, editor, useCompactLayout())
+  const today = todayLocal()
+  const reminder = reminderLabel(task, today)
+  const isSet = Boolean(task.dueDate || reminder)
+  const label = task.dueDate
+    ? `Due ${formatDate(task.dueDate, today)}`
+    : reminder
+      ? `Remind me at ${formatReminder(task.reminderAt!, today)}`
+      : 'Add date & reminder'
   return (
     <div className={styles.actionRow}>
-      <MenuTrigger disableButtonEnhancement>
-        <Button appearance="transparent" icon={props.icon} className={mergeClasses(styles.action, props.isSet && styles.actionSet)}>
-          {props.label}
-        </Button>
-      </MenuTrigger>
-      {props.isSet && props.onClear && (
-        <Button appearance="transparent" icon={<DismissRegular />} aria-label={`Remove ${props.label}`} onClick={props.onClear} />
+      <Button
+        appearance="transparent"
+        icon={<CalendarLtrRegular />}
+        className={mergeClasses(styles.action, isSet && styles.actionSet)}
+        onClick={(e) => {
+          editor.begin()
+          picker.open(e.currentTarget)
+        }}
+      >
+        <span className={styles.actionText}>
+          <span>{label}</span>
+          {task.dueDate && reminder && (
+            <span className={styles.actionSub}>
+              <AlertRegular fontSize={12} />
+              Remind me at {reminder}
+            </span>
+          )}
+        </span>
+      </Button>
+      {isSet && (
+        <Tooltip content="Remove date and reminder" relationship="label">
+          <Button
+            appearance="transparent"
+            icon={<DismissRegular />}
+            onClick={() => {
+              editor.begin()
+              editor.pickDate(null)
+              editor.end()
+            }}
+          />
+        </Tooltip>
       )}
+      {picker.element}
     </div>
   )
 }
 
-function ReminderAction({ task, onChange }: { task: Task; onChange: OnChange }) {
-  const [picking, setPicking] = useState(false)
-  const set = task.isReminderOn && task.reminderAt
-  return (
-    <>
-      <Menu>
-        <ActionButton
-          icon={<AlertRegular />}
-          label={set ? `Remind me at ${formatReminder(task.reminderAt!)}` : 'Remind me'}
-          isSet={Boolean(set)}
-          onClear={() => onChange({ reminderAt: null, isReminderOn: false })}
-        />
-        <MenuPopover>
-          <MenuList>
-            {reminderPresets().map((p) => (
-              <MenuItem key={p.id} onClick={() => onChange({ reminderAt: p.at, isReminderOn: true })}>
-                {p.label} <Caption1>&nbsp;{formatReminder(p.at)}</Caption1>
-              </MenuItem>
-            ))}
-            <MenuDivider />
-            <MenuItem onClick={() => setPicking(true)}>Pick a date & time</MenuItem>
-          </MenuList>
-        </MenuPopover>
-      </Menu>
-      {picking && (
-        <DateTimeDialog
-          open
-          title="Remind me"
-          withTime
-          initial={task.reminderAt}
-          onSave={(at) => onChange({ reminderAt: at, isReminderOn: true })}
-          onClose={() => setPicking(false)}
-        />
-      )}
-    </>
-  )
-}
-
-function DueAction({ task, onChange }: { task: Task; onChange: OnChange }) {
-  const [picking, setPicking] = useState(false)
-  const today = todayLocal()
-  return (
-    <>
-      <Menu>
-        <ActionButton
-          icon={<CalendarLtrRegular />}
-          label={task.dueDate ? `Due ${formatDate(task.dueDate, today)}` : 'Add due date'}
-          isSet={Boolean(task.dueDate)}
-          onClear={() => onChange({ dueDate: null })}
-        />
-        <MenuPopover>
-          <MenuList>
-            {duePresets(today).map((p) => (
-              <MenuItem key={p.id} onClick={() => onChange({ dueDate: p.date })}>
-                {p.label} <Caption1>&nbsp;{formatDate(p.date, '')}</Caption1>
-              </MenuItem>
-            ))}
-            <MenuDivider />
-            <MenuItem onClick={() => setPicking(true)}>Pick a date</MenuItem>
-          </MenuList>
-        </MenuPopover>
-      </Menu>
-      {picking && (
-        <DateTimeDialog
-          open
-          title="Due date"
-          withTime={false}
-          initial={task.dueDate}
-          onSave={(date) => onChange({ dueDate: date })}
-          onClose={() => setPicking(false)}
-        />
-      )}
-    </>
-  )
-}
-
-const REPEAT_LABELS: Record<RepeatPreset, string> = {
-  daily: 'Daily',
-  weekdays: 'Weekdays',
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  yearly: 'Yearly',
-}
-
 function RepeatAction({ task, onChange }: { task: Task; onChange: OnChange }) {
-  const [custom, setCustom] = useState(false)
-  const anchor = task.dueDate ?? todayLocal()
-  const current = recurrencePreset(task.recurrence)
+  const styles = useStyles()
   return (
-    <>
-      <Menu>
-        <ActionButton
+    <div className={styles.actionRow}>
+      <RepeatMenu task={task}>
+        <Button
+          appearance="transparent"
           icon={<ArrowRepeatAllRegular />}
-          label={task.recurrence ? describeRecurrence(task.recurrence) : 'Repeat'}
-          isSet={Boolean(task.recurrence)}
-          onClear={() => onChange({ recurrence: null })}
-        />
-        <MenuPopover>
-          <MenuList>
-            {(Object.keys(REPEAT_LABELS) as RepeatPreset[]).map((p) => (
-              <MenuItem key={p} onClick={() => onChange({ recurrence: buildRecurrence(p, anchor), dueDate: anchor })}>
-                {REPEAT_LABELS[p]}
-                {current === p ? ' ✓' : ''}
-              </MenuItem>
-            ))}
-            <MenuDivider />
-            <MenuItem onClick={() => setCustom(true)}>Custom…</MenuItem>
-          </MenuList>
-        </MenuPopover>
-      </Menu>
-      {custom && (
-        <CustomRepeatDialog
-          open
-          onSave={(r) => onChange({ recurrence: buildRecurrence(r, anchor), dueDate: anchor })}
-          onClose={() => setCustom(false)}
+          className={mergeClasses(styles.action, Boolean(task.recurrence) && styles.actionSet)}
+        >
+          {task.recurrence ? describeRecurrence(task.recurrence) : 'Repeat'}
+        </Button>
+      </RepeatMenu>
+      {task.recurrence && (
+        <Button
+          appearance="transparent"
+          icon={<DismissRegular />}
+          aria-label="Remove Repeat"
+          onClick={() => onChange({ recurrence: null })}
         />
       )}
-    </>
+    </div>
   )
 }
 

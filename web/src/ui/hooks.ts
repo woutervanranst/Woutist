@@ -3,6 +3,8 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router'
 import { useServices } from '../app/AppServices'
 import { usePrefs } from '../app/prefs'
+import { useMediaQuery } from '../app/theme'
+import type { DateSettings } from '../models/quickDates'
 import type { Task, TodoList } from '../models/todo'
 import { orderLists } from '../models/views'
 import type { AttachmentRecord, CategoryRecord } from '../services/db'
@@ -56,6 +58,32 @@ export function useSyncStatus(): SyncStatus {
 export function useAccountPrefs() {
   const { accountKey } = useServices()
   return usePrefs(accountKey)
+}
+
+/**
+ * Quick dates and reminder times. Changes are marked for saving to the Microsoft account, so every
+ * device gets them (services/settingsSync.ts).
+ */
+export function useDateSettings(): [DateSettings, (fn: (s: DateSettings) => DateSettings) => void] {
+  const [prefs, update] = useAccountPrefs()
+  const set = useCallback(
+    (fn: (s: DateSettings) => DateSettings) =>
+      update((p) => {
+        const dates = fn(p.dates)
+        if (dates === p.dates) return p
+        // Last writer wins across devices, so a change must never look older than the one it replaces.
+        const previous = p.datesUpdatedAt ? Date.parse(p.datesUpdatedAt) : 0
+        const at = new Date(Math.max(Date.now(), previous + 1)).toISOString()
+        return { ...p, dates, datesUpdatedAt: at, datesDirty: true }
+      }),
+    [update],
+  )
+  return [prefs.dates, set]
+}
+
+/** Phone-sized layout: the details pane replaces the list and pickers open as bottom sheets. */
+export function useCompactLayout(): boolean {
+  return !useMediaQuery('(min-width: 900px)')
 }
 
 /**

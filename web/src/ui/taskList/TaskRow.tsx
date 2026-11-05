@@ -17,18 +17,23 @@ import { ArrowRepeatAllRegular } from '@fluentui/react-icons/svg/arrow-repeat-al
 import { ArrowSyncRegular } from '@fluentui/react-icons/svg/arrow-sync'
 import { AttachRegular } from '@fluentui/react-icons/svg/attach'
 import { CalendarLtrRegular } from '@fluentui/react-icons/svg/calendar-ltr'
+import { CalendarMonthRegular } from '@fluentui/react-icons/svg/calendar-month'
 import { CheckmarkCircleFilled } from '@fluentui/react-icons/svg/checkmark-circle'
 import { CircleRegular } from '@fluentui/react-icons/svg/circle'
 import { DeleteRegular } from '@fluentui/react-icons/svg/delete'
 import { NoteRegular } from '@fluentui/react-icons/svg/note'
 import { StarFilled, StarRegular } from '@fluentui/react-icons/svg/star'
-import { type MouseEvent, memo } from 'react'
+import { type KeyboardEvent, type MouseEvent, memo, useRef, useState } from 'react'
 import type { Task, TodoList } from '../../models/todo'
-import { addDays, todayLocal } from '../../models/time'
+import { todayLocal } from '../../models/time'
 import { formatDate, formatReminder } from '../../models/presets'
+import { reminderLabel } from '../../models/dateReminder'
 import type { CategoryRecord } from '../../services/db'
 import { categoryColor } from '../common/categoryColors'
 import { listLabel } from '../common/ListIcon'
+import { ContextDateSection } from '../dates/ContextDateSection'
+import { useDateEditor } from '../dates/useDateEditor'
+import { useDatePicker } from '../dates/useDatePicker'
 
 const useStyles = makeStyles({
   row: {
@@ -67,10 +72,30 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
   },
   metaItem: { display: 'inline-flex', alignItems: 'center', gap: '3px' },
+  dateChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    margin: '-2px -4px',
+    padding: '2px 4px',
+    border: 'none',
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: 'transparent',
+    color: 'inherit',
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    lineHeight: 'inherit',
+    cursor: 'pointer',
+    ':hover': { backgroundColor: tokens.colorSubtleBackgroundPressed },
+    ':focus-visible': { outline: `2px solid ${tokens.colorStrokeFocus2}` },
+  },
+  addDate: { color: tokens.colorNeutralForeground4 },
+  reminderPart: { display: 'inline-flex', alignItems: 'center', gap: '3px', marginLeft: '3px' },
   overdue: { color: tokens.colorPaletteRedForeground1 },
   today: { color: tokens.colorBrandForeground1 },
   dot: { width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block' },
   star: { color: tokens.colorBrandForeground1 },
+  menu: { width: '296px', maxWidth: 'calc(100vw - 16px)', boxSizing: 'border-box' },
 })
 
 interface Props {
@@ -81,10 +106,11 @@ interface Props {
   pending: boolean
   lists: TodoList[]
   categories: CategoryRecord[]
+  /** Phone-sized layout: the date picker opens as a bottom sheet. */
+  compact: boolean
   onSelect: (taskId: string) => void
   onToggleCompleted: (taskId: string) => void
   onToggleImportant: (taskId: string) => void
-  onUpdateDue: (taskId: string, date: string | null) => void
   onMove: (taskId: string, listId: string) => void
   onDelete: (task: Task) => void
 }
@@ -93,8 +119,27 @@ export const TaskRow = memo(function TaskRow(props: Props) {
   const { task, list, showListName, selected, pending, lists, categories } = props
   const styles = useStyles()
   const today = todayLocal()
-  const stop = (e: MouseEvent) => e.stopPropagation()
+  const stop = (e: MouseEvent | KeyboardEvent) => e.stopPropagation()
   const checkedSteps = task.steps.filter((s) => s.isChecked).length
+
+  const editor = useDateEditor(task)
+  const picker = useDatePicker(task, editor, props.compact)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
+  const menuPoint = useRef<{ x: number; y: number } | null>(null)
+  // The right-click menu hands its editing session over to the full picker ("Pick a date…").
+  const handingOver = useRef(false)
+
+  const closeMenu = () => {
+    setMenuOpen(false)
+    editor.end()
+  }
+  const openFullPicker = () => {
+    handingOver.current = true
+    setMenuOpen(false)
+    const from = menuPoint.current ?? rowRef.current
+    if (from) picker.open(from, { calendar: true })
+  }
 
   const meta: React.ReactNode[] = []
   if (showListName && list) meta.push(<span key="list">{listLabel(list)}</span>)
@@ -105,22 +150,58 @@ export const TaskRow = memo(function TaskRow(props: Props) {
       </span>,
     )
   }
-  if (task.dueDate) {
-    const cls = !task.completed && task.dueDate < today ? styles.overdue : task.dueDate === today ? styles.today : undefined
+  const reminder = reminderLabel(task, today)
+  if (task.dueDate || reminder || !task.completed) {
+    const cls = task.dueDate
+      ? !task.completed && task.dueDate < today
+        ? styles.overdue
+        : task.dueDate === today
+          ? styles.today
+          : undefined
+      : !reminder && styles.addDate
     meta.push(
-      <span key="due" className={mergeClasses(styles.metaItem, cls)}>
-        <CalendarLtrRegular fontSize={14} />
-        {formatDate(task.dueDate, today)}
-        {task.recurrence && <ArrowRepeatAllRegular fontSize={14} aria-label="Repeats" />}
-      </span>,
-    )
-  }
-  if (task.isReminderOn && task.reminderAt) {
-    meta.push(
-      <span key="reminder" className={styles.metaItem}>
-        <AlertRegular fontSize={14} />
-        {formatReminder(task.reminderAt, today)}
-      </span>,
+      <button
+        key="date"
+        type="button"
+        className={mergeClasses(styles.dateChip, cls)}
+        aria-label={
+          task.dueDate || reminder
+            ? `Change date or reminder: ${[task.dueDate && `due ${formatDate(task.dueDate, today)}`, reminder && `reminder ${reminder}`]
+                .filter(Boolean)
+                .join(', ')}`
+            : 'Add date'
+        }
+        onClick={(e) => {
+          stop(e)
+          editor.begin()
+          picker.open(e.currentTarget)
+        }}
+        onKeyDown={stop}
+      >
+        {task.dueDate ? (
+          <>
+            <CalendarLtrRegular fontSize={14} />
+            {formatDate(task.dueDate, today)}
+            {reminder && (
+              <span className={styles.reminderPart}>
+                <AlertRegular fontSize={13} />
+                {reminder}
+              </span>
+            )}
+            {task.recurrence && <ArrowRepeatAllRegular fontSize={14} aria-label="Repeats" />}
+          </>
+        ) : reminder ? (
+          <>
+            <AlertRegular fontSize={14} />
+            {formatReminder(task.reminderAt!, today)}
+          </>
+        ) : (
+          <>
+            <CalendarLtrRegular fontSize={14} />
+            Add date
+          </>
+        )}
+      </button>,
     )
   }
   if (task.hasAttachments) {
@@ -157,95 +238,119 @@ export const TaskRow = memo(function TaskRow(props: Props) {
   }
 
   return (
-    <Menu openOnContext>
-      <MenuTrigger disableButtonEnhancement>
-        <div
-          role="button"
-          tabIndex={0}
-          aria-pressed={selected}
-          className={mergeClasses(styles.row, selected && styles.selected)}
-          onClick={() => props.onSelect(task.id)}
+    <>
+      <Menu
+        openOnContext
+        open={menuOpen}
+        onOpenChange={(_, d) => {
+          setMenuOpen(d.open)
+          if (d.open) {
+            handingOver.current = false
+            editor.begin()
+          } else if (handingOver.current) {
+            handingOver.current = false
+          } else {
+            editor.end()
+          }
+        }}
+      >
+        <MenuTrigger disableButtonEnhancement>
+          <div
+            ref={rowRef}
+            role="button"
+            tabIndex={0}
+            aria-pressed={selected}
+            className={mergeClasses(styles.row, selected && styles.selected)}
+            onClick={() => props.onSelect(task.id)}
+            onContextMenu={(e) => {
+              // Keyboard-opened menus (Shift+F10) report 0,0: anchor the picker on the row then.
+              menuPoint.current = e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') props.onSelect(task.id)
+            }}
+          >
+            <Button
+              appearance="transparent"
+              shape="circular"
+              aria-label={task.completed ? 'Mark as not completed' : 'Mark as completed'}
+              icon={
+                task.completed ? (
+                  <CheckmarkCircleFilled fontSize={22} className={styles.star} />
+                ) : (
+                  <CircleRegular fontSize={22} />
+                )
+              }
+              onClick={(e) => {
+                stop(e)
+                props.onToggleCompleted(task.id)
+              }}
+            />
+            <div className={styles.main}>
+              <span className={mergeClasses(styles.title, task.completed === 1 && styles.done)}>{task.title}</span>
+              {meta.length > 0 && <div className={styles.meta}>{meta}</div>}
+            </div>
+            <Button
+              appearance="transparent"
+              aria-label={task.important ? 'Remove importance' : 'Mark as important'}
+              icon={task.important ? <StarFilled className={styles.star} /> : <StarRegular />}
+              onClick={(e) => {
+                stop(e)
+                props.onToggleImportant(task.id)
+              }}
+            />
+          </div>
+        </MenuTrigger>
+        <MenuPopover
+          className={styles.menu}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') props.onSelect(task.id)
+            const inField = (e.target as HTMLElement).closest('input, textarea')
+            if (!inField && (e.key === 't' || e.key === 'T') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              e.preventDefault()
+              openFullPicker()
+            }
           }}
         >
-          <Button
-            appearance="transparent"
-            shape="circular"
-            aria-label={task.completed ? 'Mark as not completed' : 'Mark as completed'}
-            icon={
-              task.completed ? (
-                <CheckmarkCircleFilled fontSize={22} className={styles.star} />
-              ) : (
-                <CircleRegular fontSize={22} />
-              )
-            }
-            onClick={(e) => {
-              stop(e)
-              props.onToggleCompleted(task.id)
-            }}
-          />
-          <div className={styles.main}>
-            <span className={mergeClasses(styles.title, task.completed === 1 && styles.done)}>{task.title}</span>
-            {meta.length > 0 && <div className={styles.meta}>{meta}</div>}
-          </div>
-          <Button
-            appearance="transparent"
-            aria-label={task.important ? 'Remove importance' : 'Mark as important'}
-            icon={task.important ? <StarFilled className={styles.star} /> : <StarRegular />}
-            onClick={(e) => {
-              stop(e)
-              props.onToggleImportant(task.id)
-            }}
-          />
-        </div>
-      </MenuTrigger>
-      <MenuPopover>
-        <MenuList>
-          <MenuItem
-            icon={task.important ? <StarFilled /> : <StarRegular />}
-            onClick={() => props.onToggleImportant(task.id)}
-          >
-            {task.important ? 'Remove importance' : 'Mark as important'}
-          </MenuItem>
-          <MenuItem icon={<CheckmarkCircleFilled />} onClick={() => props.onToggleCompleted(task.id)}>
-            {task.completed ? 'Mark as not completed' : 'Mark as completed'}
-          </MenuItem>
-          <MenuDivider />
-          <MenuItem icon={<CalendarLtrRegular />} onClick={() => props.onUpdateDue(task.id, today)}>
-            Due today
-          </MenuItem>
-          <MenuItem icon={<CalendarLtrRegular />} onClick={() => props.onUpdateDue(task.id, addDays(today, 1))}>
-            Due tomorrow
-          </MenuItem>
-          {task.dueDate && (
-            <MenuItem icon={<CalendarLtrRegular />} onClick={() => props.onUpdateDue(task.id, null)}>
-              Remove due date
+          <MenuList>
+            <MenuItem
+              icon={task.important ? <StarFilled /> : <StarRegular />}
+              onClick={() => props.onToggleImportant(task.id)}
+            >
+              {task.important ? 'Remove importance' : 'Mark as important'}
             </MenuItem>
-          )}
-          <MenuDivider />
-          <Menu>
-            <MenuTrigger disableButtonEnhancement>
-              <MenuItem icon={<ArrowMoveRegular />}>Move task to…</MenuItem>
-            </MenuTrigger>
-            <MenuPopover>
-              <MenuList>
-                {lists
-                  .filter((l) => l.id !== task.listId && l.wellknownListName !== 'flaggedEmails')
-                  .map((l) => (
-                    <MenuItem key={l.id} onClick={() => props.onMove(task.id, l.id)}>
-                      {l.displayName}
-                    </MenuItem>
-                  ))}
-              </MenuList>
-            </MenuPopover>
-          </Menu>
-          <MenuDivider />
-          <MenuItem icon={<DeleteRegular />} onClick={() => props.onDelete(task)}>
-            Delete task
-          </MenuItem>
-        </MenuList>
-      </MenuPopover>
-    </Menu>
+            <MenuItem icon={<CheckmarkCircleFilled />} onClick={() => props.onToggleCompleted(task.id)}>
+              {task.completed ? 'Mark as not completed' : 'Mark as completed'}
+            </MenuItem>
+            <MenuDivider />
+            <ContextDateSection task={task} editor={editor} onDone={closeMenu} />
+            <MenuItem icon={<CalendarMonthRegular />} secondaryContent="T" onClick={openFullPicker}>
+              Pick a date…
+            </MenuItem>
+            <MenuDivider />
+            <Menu>
+              <MenuTrigger disableButtonEnhancement>
+                <MenuItem icon={<ArrowMoveRegular />}>Move task to…</MenuItem>
+              </MenuTrigger>
+              <MenuPopover>
+                <MenuList>
+                  {lists
+                    .filter((l) => l.id !== task.listId && l.wellknownListName !== 'flaggedEmails')
+                    .map((l) => (
+                      <MenuItem key={l.id} onClick={() => props.onMove(task.id, l.id)}>
+                        {l.displayName}
+                      </MenuItem>
+                    ))}
+                </MenuList>
+              </MenuPopover>
+            </Menu>
+            <MenuDivider />
+            <MenuItem icon={<DeleteRegular />} onClick={() => props.onDelete(task)}>
+              Delete task
+            </MenuItem>
+          </MenuList>
+        </MenuPopover>
+      </Menu>
+      {picker.element}
+    </>
   )
 })

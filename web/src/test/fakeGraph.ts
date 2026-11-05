@@ -1,6 +1,6 @@
 /**
  * In-memory fake of the Microsoft Graph To Do API for tests (MSW handlers).
- * Implements lists, tasks (+ delta), checklistItems, attachments, /me and master categories,
+ * Implements lists (+ open extensions), tasks (+ delta), checklistItems, attachments, /me and master categories,
  * plus paging, request recording and failure injection.
  */
 import type { ChecklistItem, TodoTask, TodoTaskList } from '@microsoft/microsoft-graph-types'
@@ -26,6 +26,8 @@ interface StoredList {
   list: TodoTaskList & { id: string }
   tasks: Map<string, StoredTask>
   attachments: Map<string, StoredAttachment[]>
+  /** Open extensions by extension name. */
+  extensions: Map<string, Record<string, unknown>>
 }
 
 interface Change {
@@ -68,6 +70,7 @@ export class FakeGraph {
       list: { id, displayName, wellknownListName: 'none', isOwner: true, isShared: false, ...extra },
       tasks: new Map(),
       attachments: new Map(),
+      extensions: new Map(),
     })
     this.listChangeSeq.push({ seq: ++this.seq, listId: id })
     return id
@@ -91,6 +94,12 @@ export class FakeGraph {
     this.list(listId).tasks.set(id, stored)
     this.touch(listId, id)
     return id
+  }
+
+  /** An open extension on a list, by name (like Graph, it can also be addressed by its full id). */
+  listExtension(listId: string, name: string): Record<string, unknown> | undefined {
+    const all = this.lists.get(listId)?.extensions
+    return all?.get(name) ?? [...(all?.values() ?? [])].find((e) => e.id === name)
   }
 
   task(listId: string, taskId: string): StoredTask | undefined {
@@ -217,6 +226,30 @@ export class FakeGraph {
         this.list(params.listId)
         this.lists.delete(params.listId)
         this.listChangeSeq.push({ seq: ++this.seq, listId: params.listId })
+      })),
+
+      // ----- open extensions on lists -----
+      http.get(`${BASE}/me/todo/lists/:listId/extensions/:extId`, wrap('GET', ({ params }) => {
+        this.list(params.listId)
+        const ext = this.listExtension(params.listId, params.extId)
+        if (!ext) throw new NotFound()
+        return ext
+      })),
+      http.post(`${BASE}/me/todo/lists/:listId/extensions`, wrap('POST', ({ params, body }) => {
+        const l = this.list(params.listId)
+        const b = body as Record<string, unknown> & { extensionName: string }
+        if (l.extensions.has(b.extensionName)) {
+          return HttpResponse.json({ error: { code: 'NameAlreadyExists', message: 'Exists' } }, { status: 409 })
+        }
+        const ext = { ...b, id: `Microsoft.OutlookServices.OpenTypeExtension.${b.extensionName}` }
+        l.extensions.set(b.extensionName, ext)
+        return ext
+      })),
+      http.patch(`${BASE}/me/todo/lists/:listId/extensions/:extId`, wrap('PATCH', ({ params, body }) => {
+        const ext = this.listExtension(params.listId, params.extId)
+        if (!ext) throw new NotFound()
+        Object.assign(ext, body)
+        return ext
       })),
 
       // ----- tasks -----

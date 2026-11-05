@@ -38,6 +38,7 @@ import {
   useAccountPrefs,
   useAllTasks,
   useCategories,
+  useCompactLayout,
   useLists,
   usePendingTaskIds,
   useSelectedTask,
@@ -106,6 +107,7 @@ export function TaskListView({ view }: Props) {
   const pending = usePendingTaskIds()
   const [prefs, updatePrefs] = useAccountPrefs()
   const [selectedId, select] = useSelectedTask()
+  const compact = useCompactLayout()
   const [newTitle, setNewTitle] = useState('')
   const [deleting, setDeleting] = useState<Task | null>(null)
   const addRef = useRef<HTMLInputElement>(null)
@@ -156,7 +158,6 @@ export function TaskListView({ view }: Props) {
     onSelect: useCallback((id: string) => select(id), [select]),
     onToggleCompleted: useCallback((id: string) => void repo.toggleCompleted(id), [repo]),
     onToggleImportant: useCallback((id: string) => void repo.toggleImportant(id), [repo]),
-    onUpdateDue: useCallback((id: string, date: string | null) => void repo.updateTask(id, { dueDate: date }), [repo]),
     onMove: useCallback(
       (id: string, listId: string) =>
         void repo.moveTask(id, listId).then((newId) => {
@@ -207,6 +208,7 @@ export function TaskListView({ view }: Props) {
     pending: pending.has(task.id),
     lists: lists ?? [],
     categories,
+    compact,
     ...handlers,
   })
 
@@ -268,17 +270,15 @@ export function TaskListView({ view }: Props) {
       )}
 
       <div className={styles.list}>
+        {/* One flat list (headers between rows), so a task moving to another group keeps its row and
+            an open menu or picker stays open. */}
         {planned
-          ? groupPlanned(open).map((g) => (
-              <div key={g.group}>
-                <div className={styles.section}>
-                  {PLANNED_GROUP_LABELS[g.group]} <Text size={200}>({g.tasks.length})</Text>
-                </div>
-                {g.tasks.map((t) => (
-                  <TaskRow key={t.id} {...rowProps(t)} />
-                ))}
-              </div>
-            ))
+          ? groupPlanned(open).flatMap((g) => [
+              <div key={`group:${g.group}`} className={styles.section}>
+                {PLANNED_GROUP_LABELS[g.group]} <Text size={200}>({g.tasks.length})</Text>
+              </div>,
+              ...g.tasks.map((t) => <TaskRow key={t.id} {...rowProps(t)} />),
+            ])
           : open.map((t) => <TaskRow key={t.id} {...rowProps(t)} />)}
 
         {view.kind === 'smart' && view.id === 'completed'

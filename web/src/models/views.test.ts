@@ -3,11 +3,9 @@ import { newLocalTask, type Task } from './todo'
 import {
   buildRecurrence,
   describeRecurrence,
-  duePresets,
   formatDate,
   nextMonday,
   recurrencePreset,
-  reminderPresets,
 } from './presets'
 import { groupPlanned, orderLists, sortTasks, splitListEmoji, tasksForView } from './views'
 
@@ -82,20 +80,9 @@ describe('smart lists', () => {
 })
 
 describe('presets', () => {
-  it('computes due date presets', () => {
-    expect(duePresets('2026-11-04').map((p) => p.date)).toEqual(['2026-11-04', '2026-11-05', '2026-11-09'])
+  it('finds next Monday', () => {
+    expect(nextMonday('2026-11-04')).toBe('2026-11-09')
     expect(nextMonday('2026-11-09')).toBe('2026-11-16')
-  })
-
-  it('computes reminder presets in the user zone', () => {
-    const presets = reminderPresets(new Date('2026-11-04T10:15:00Z'), 'Europe/Brussels')
-    expect(presets.map((p) => [p.id, p.at])).toEqual([
-      ['laterToday', '2026-11-04T13:00:00.000Z'],
-      ['tomorrow', '2026-11-05T08:00:00.000Z'],
-      ['nextWeek', '2026-11-09T08:00:00.000Z'],
-    ])
-    // Late in the evening there's no "later today".
-    expect(reminderPresets(new Date('2026-11-04T21:30:00Z'), 'Europe/Brussels')[0].id).toBe('tomorrow')
   })
 
   it('builds and describes recurrences', () => {
