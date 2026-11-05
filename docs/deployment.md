@@ -4,7 +4,7 @@
 
 | Resource | Name | Notes |
 |---|---|---|
-| Static Web App (Free) | `swa-woutist` | `https://proud-moss-0d9caa003.5.azurestaticapps.net`; hosts `web/dist` |
+| Static Web App (Free) | `swa-woutist` | **`https://woutist.wouteronarchitecture.com`** (custom domain; default host `https://proud-moss-0d9caa003.5.azurestaticapps.net` still works); hosts `web/dist` |
 | Function App (Flex Consumption, Node 24) | `func-woutist` | `https://func-woutist.azurewebsites.net/api`; system-assigned identity |
 | Storage account | `stwoutist5e32d4` | Functions host storage, deployment container `app-package-func-woutist`, Woutist tables |
 | Application Insights | `func-woutist` | Function logs |
@@ -21,10 +21,10 @@ The Function App reaches storage with **its managed identity** (`AzureWebJobsSto
 | `TABLES_ENDPOINT` | `https://<account>.table.core.windows.net` (subscriptions, reminders, schedule, state tables) |
 | `ENTRA_CLIENT_ID` | Expected `aud` of incoming access tokens |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push key pair. **The private key exists only here.** |
-| `VAPID_SUBJECT` | Contact URL sent to push services (the SWA URL) |
+| `VAPID_SUBJECT` | Contact URL sent to push services (`https://woutist.wouteronarchitecture.com`) |
 | `ALLOWED_USERS` | Optional allowlist: comma-separated `tenantId` or `tenantId:objectId` entries. Empty means anyone with a Microsoft account. |
 
-CORS allows only the SWA origin and `http://localhost:5173`.
+CORS allows only the site's origins (custom domain and default SWA host) and `http://localhost:5173`.
 
 ## How it was created
 
@@ -48,6 +48,17 @@ az functionapp config appsettings set -g rg-woutist -n func-woutist --settings \
 az functionapp config appsettings delete -g rg-woutist -n func-woutist --setting-names AzureWebJobsStorage
 az functionapp cors add -g rg-woutist -n func-woutist --allowed-origins https://<swa-host> http://localhost:5173
 ```
+
+## Custom domain
+
+`woutist.wouteronarchitecture.com` (DNS at Hostinger). SWA Free includes the managed TLS certificate.
+
+1. DNS: `CNAME woutist → <default SWA host>` (no CAA record on the zone, or one that allows `digicert.com`).
+2. `az staticwebapp hostname set -n swa-woutist -g rg-woutist --hostname <domain> --validation-method cname-delegation`
+3. Add `https://<domain>` and `https://<domain>/redirect.html` to the Entra SPA redirect URIs, add `https://<domain>` to the Function App CORS, and set `VAPID_SUBJECT=https://<domain>`.
+4. `gh variable set SWA_HOSTNAME --body <domain>` (the deploy job's environment URL).
+
+A new domain is a new browser origin. Sign-in, the offline cache, the installed PWA and push subscriptions don't carry over. Turn off notifications on the old origin first, or each reminder arrives twice.
 
 ## GitHub + CI/CD (one-time)
 

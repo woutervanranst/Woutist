@@ -10,6 +10,7 @@ RG="${RG:-rg-woutist}"
 SWA="${SWA:-swa-woutist}"
 FUNC="${FUNC:-func-woutist}"
 IDENTITY="${IDENTITY:-id-woutist-github}"
+SITE_HOST="${SITE_HOST:-woutist.wouteronarchitecture.com}" # custom domain; set SITE_HOST= to use the default SWA host
 CLIENT_ID_APP="ef5e6e64-2019-41a7-8b29-35ef15b28c5f" # Entra app registration (public value)
 FULL="$OWNER/$REPO"
 
@@ -67,7 +68,7 @@ gh variable set VITE_API_BASE_URL --repo "$FULL" --body "https://$FUNC.azurewebs
 gh variable set VITE_VAPID_PUBLIC_KEY --repo "$FULL" \
   --body "$(az functionapp config appsettings list -g "$RG" -n "$FUNC" --query "[?name=='VAPID_PUBLIC_KEY'].value | [0]" -o tsv)"
 gh variable set SWA_HOSTNAME --repo "$FULL" \
-  --body "$(az staticwebapp show -n "$SWA" -g "$RG" --query defaultHostname -o tsv)"
+  --body "${SITE_HOST:-$(az staticwebapp show -n "$SWA" -g "$RG" --query defaultHostname -o tsv)}"
 
 echo "==> Push main (starts CI/CD)"
 git push -u origin main

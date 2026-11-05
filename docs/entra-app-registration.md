@@ -19,7 +19,8 @@ The client ID and tenant ID aren't secrets; they end up in the JavaScript bundle
 ## Redirect URIs (platform: Single-page application)
 
 - `http://localhost:5173` and `http://localhost:5173/redirect.html`, for local dev with Vite
-- `https://proud-moss-0d9caa003.5.azurestaticapps.net` and `https://proud-moss-0d9caa003.5.azurestaticapps.net/redirect.html` (production, `swa-woutist`)
+- `https://woutist.wouteronarchitecture.com` and `https://woutist.wouteronarchitecture.com/redirect.html` (production, custom domain)
+- `https://proud-moss-0d9caa003.5.azurestaticapps.net` and `https://proud-moss-0d9caa003.5.azurestaticapps.net/redirect.html` (production, default `swa-woutist` host)
 
 `/redirect.html` is a blank page that MSAL uses as the `redirectUri` for popup and silent token requests.
 
