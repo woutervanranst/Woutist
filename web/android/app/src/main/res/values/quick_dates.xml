@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick-date icon colors, as in the app (web/src/app/theme.ts). -->
+<resources>
+    <color name="quick_date_today">#107C10</color>
+    <color name="quick_date_tomorrow">#CA5010</color>
+    <color name="quick_date_day_after">#038387</color>
+    <color name="quick_date_weekend">#0F6CBD</color>
+    <color name="quick_date_next_week">#8764B8</color>
+    <color name="quick_date_in_week">#C239B3</color>
+    <color name="quick_date_days">#986F0B</color>
+    <color name="quick_date_weeks">#4F6BED</color>
+    <color name="quick_date_weekday">#0B6A0B</color>
+    <color name="quick_date_none">#616161</color>
+    <color name="quick_add_chip_text">#242424</color>
+    <color name="quick_add_chip_stroke">#D1D1D1</color>
+    <color name="quick_add_muted">#616161</color>
+</resources>

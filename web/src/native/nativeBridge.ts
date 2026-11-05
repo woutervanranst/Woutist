@@ -68,6 +68,7 @@ export class NativeBridge {
       lists: this.data.lists,
       tasks: this.data.tasks,
       sort: readPrefs(this.accountKey).sort,
+      dates: readPrefs(this.accountKey).dates,
       now: new Date(),
       timeZone: userTimeZone(),
       outboxPending: this.data.outbox > 0,

@@ -1,0 +1,42 @@
+{
+  "2026-11-05": [
+    ["today", "Today", "Today", "2026-11-05"],
+    ["tomorrow", "Tomorrow", "Tomorrow", "2026-11-06"],
+    ["weekend", "This weekend", "Weekend", "2026-11-07"],
+    ["nextWeek", "Next week", "Next week", "2026-11-09"],
+    ["inWeek", "In one week", "In 1 week", "2026-11-12"],
+    ["c1", "In 3 days", "In 3 days", "2026-11-08"],
+    ["c2", "In 2 weeks", "In 2 wk", "2026-11-19"],
+    ["c3", "Next Wednesday", "Next Wed", "2026-11-11"]
+  ],
+  "2026-11-07": [
+    ["today", "Today", "Today", "2026-11-07"],
+    ["tomorrow", "Tomorrow", "Tomorrow", "2026-11-08"],
+    ["weekend", "This weekend", "Weekend", "2026-11-07"],
+    ["nextWeek", "Next week", "Next week", "2026-11-09"],
+    ["inWeek", "In one week", "In 1 week", "2026-11-14"],
+    ["c1", "In 3 days", "In 3 days", "2026-11-10"],
+    ["c2", "In 2 weeks", "In 2 wk", "2026-11-21"],
+    ["c3", "Next Wednesday", "Next Wed", "2026-11-11"]
+  ],
+  "2026-11-08": [
+    ["today", "Today", "Today", "2026-11-08"],
+    ["tomorrow", "Tomorrow", "Tomorrow", "2026-11-09"],
+    ["weekend", "This weekend", "Weekend", "2026-11-14"],
+    ["nextWeek", "Next week", "Next week", "2026-11-09"],
+    ["inWeek", "In one week", "In 1 week", "2026-11-15"],
+    ["c1", "In 3 days", "In 3 days", "2026-11-11"],
+    ["c2", "In 2 weeks", "In 2 wk", "2026-11-22"],
+    ["c3", "Next Wednesday", "Next Wed", "2026-11-11"]
+  ],
+  "2026-12-31": [
+    ["today", "Today", "Today", "2026-12-31"],
+    ["tomorrow", "Tomorrow", "Tomorrow", "2027-01-01"],
+    ["weekend", "This weekend", "Weekend", "2027-01-02"],
+    ["nextWeek", "Next week", "Next week", "2027-01-04"],
+    ["inWeek", "In one week", "In 1 week", "2027-01-07"],
+    ["c1", "In 3 days", "In 3 days", "2027-01-03"],
+    ["c2", "In 2 weeks", "In 2 wk", "2027-01-14"],
+    ["c3", "Next Wednesday", "Next Wed", "2027-01-06"]
+  ]
+}

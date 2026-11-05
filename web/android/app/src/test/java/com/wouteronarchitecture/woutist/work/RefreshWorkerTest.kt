@@ -1,6 +1,7 @@
 package com.wouteronarchitecture.woutist.work
 
 import com.wouteronarchitecture.woutist.auth.SignInRequired
+import com.wouteronarchitecture.woutist.data.DateSettings
 import com.wouteronarchitecture.woutist.data.PendingOp
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.data.SortPref
@@ -17,7 +18,8 @@ import java.io.IOException
 class RefreshWorkerTest {
     @get:Rule val dir = TemporaryFolder()
     private val sort = mapOf("list:L1" to SortPref("title", "asc"))
-    private fun store() = SnapshotStore(dir.root).apply { replaceBase(snapshot(task("A")).copy(sort = sort)) }
+    private val dates = DateSettings.DEFAULT.copy(preselectFirstTime = true)
+    private fun store() = SnapshotStore(dir.root).apply { replaceBase(snapshot(task("A")).copy(sort = sort, dates = dates)) }
 
     @Test fun replacesBaseKeepingSortAndPendingOverlay() = runBlocking {
         val store = store()
@@ -30,6 +32,8 @@ class RefreshWorkerTest {
         assertEquals(RefreshOutcome.Refreshed, outcome)
         assertEquals(sort, askedSort)
         assertEquals(sort, store.current()!!.sort)
+        // Quick dates come from the app too; Graph's tasks don't have them.
+        assertEquals(dates, store.current()!!.dates)
         assertEquals(listOf("A", "C"), store.current()!!.tasks.map { it.id })
     }
 

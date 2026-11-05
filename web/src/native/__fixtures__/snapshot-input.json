@@ -17,5 +17,21 @@
     { "id": "task-91d", "listId": "L1", "title": "91 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-04T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false }
   ],
   "sort": { "list:L1": { "key": "dueDate", "dir": "asc" } },
-  "outboxPending": false
+  "outboxPending": false,
+  "dates": {
+    "quickDates": [
+      { "id": "today", "on": true },
+      { "id": "tomorrow", "on": true },
+      { "id": "dayAfter", "on": false },
+      { "id": "weekend", "on": true },
+      { "id": "nextWeek", "on": true },
+      { "id": "inWeek", "on": true },
+      { "id": "c1", "on": true, "custom": { "kind": "days", "n": 3 } },
+      { "id": "c2", "on": true, "custom": { "kind": "weeks", "n": 2 } },
+      { "id": "c3", "on": true, "custom": { "kind": "weekday", "weekday": 3 } },
+      { "id": "c4", "on": false, "custom": { "kind": "days", "n": 10 } }
+    ],
+    "reminderTimes": ["08:30", "13:00"],
+    "newReminder": "first"
+  }
 }

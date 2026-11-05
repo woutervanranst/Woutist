@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bell, for reminders (tinted in code) (Fluent UI System Icons, MIT). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="20" android:viewportHeight="20">
+    <path android:fillColor="#FF000000"
+        android:pathData="M 10 2 a 5.9 5.9 0 0 1 5.98 5.36 l .02 .22 v 3.82 l .92 2.22 l .06 .17 l .01 .08 l .01 .13 a 1 1 0 0 1 -.75 .97 l -.11 .02 L 16 15 h -3.5 v .17 a 2.5 2.5 0 0 1 -5 0 V 15 H 4 l -.26 -.03 l -.13 -.04 a 1 1 0 0 1 -.6 -1.05 l .02 -.13 l .05 -.13 L 4 11.4 V 7.57 A 5.9 5.9 0 0 1 10 2 m 1.5 13 h -3 v .15 a 1.5 1.5 0 0 0 1.36 1.34 l .14 .01 c .78 0 1.42 -.6 1.5 -1.36 z M 10 3 a 4.9 4.9 0 0 0 -4.98 4.38 L 5 7.6 v 3.9 l -.04 .2 L 4 14 h 12 l -.96 -2.3 l -.04 -.2 V 7.61 A 4.9 4.9 0 0 0 10 3" />
+</vector>

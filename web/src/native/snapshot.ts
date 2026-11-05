@@ -1,4 +1,5 @@
 import type { Prefs } from '../app/prefs'
+import type { DateSettings } from '../models/quickDates'
 import { isTempId, type Task, type TodoList, type WellknownListName } from '../models/todo'
 import { instantToLocalDate } from '../models/time'
 import { sortTasks, type SortPref } from '../models/views'
@@ -18,6 +19,8 @@ export interface NativeSnapshot {
   sort: Record<string, SortPref>
   /** Local changes not in Graph yet: the phone's background refresh must not replace this snapshot. */
   outboxPending: boolean
+  /** Quick dates and reminder times for the quick-add dialog (`quickadd/QuickDates.kt`). */
+  dates: DateSettings
 }
 
 export interface NativeSnapshotTask {
@@ -43,6 +46,7 @@ export function buildSnapshot(input: {
   lists: TodoList[]
   tasks: Task[]
   sort: Prefs['sort']
+  dates: DateSettings
   now: Date
   timeZone: string
   outboxPending?: boolean
@@ -72,6 +76,7 @@ export function buildSnapshot(input: {
     tasks,
     sort: input.sort,
     outboxPending: input.outboxPending ?? false,
+    dates: input.dates,
   }
 }
 
