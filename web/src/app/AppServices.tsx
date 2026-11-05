@@ -8,6 +8,7 @@ import { TaskService } from '../services/taskService'
 import { PushApi } from '../services/push/pushApi'
 import { PushController } from '../services/push/pushController'
 import { config, pushEnabled } from '../config'
+import { isNative } from '../platform/native'
 
 export interface AppServices {
   accountKey: string
@@ -31,7 +32,8 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     const svc = new TaskService(auth.createGraphClient())
     const engine = new SyncEngine(db, svc)
     const repo = new TodoRepository(db, engine.requestFlush)
-    const push = pushEnabled
+    // The Android app schedules reminders natively; Web Push is for browsers only.
+    const push = pushEnabled && !isNative
       ? new PushController({
           db,
           engine,
