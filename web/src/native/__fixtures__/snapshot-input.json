@@ -16,5 +16,6 @@
     { "id": "task-90d", "listId": "L1", "title": "Exactly 90 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-03T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false },
     { "id": "task-91d", "listId": "L1", "title": "91 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-04T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false }
   ],
-  "sort": { "list:L1": { "key": "dueDate", "dir": "asc" } }
+  "sort": { "list:L1": { "key": "dueDate", "dir": "asc" } },
+  "outboxPending": false
 }

@@ -9,6 +9,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
@@ -50,13 +51,37 @@ class GraphApi(
         )
     }
 
+    /** The account's lists and open tasks, read fresh from Graph (the background refresh). */
+    suspend fun fetchSnapshot(accountKey: String, zone: ZoneId, sort: Map<String, SortPref>): Snapshot {
+        val lists = getAll(BASE.newBuilder().addPathSegments("me/todo/lists").build(), zone).map(GraphMapping::list)
+        val tasks = lists.flatMap { list ->
+            // $select can't include title (Graph answers 400), so full tasks are read and mapped.
+            val url = tasksUrl(list.id).newBuilder().addQueryParameter("\$filter", "status ne 'completed'").build()
+            getAll(url, zone).filter { it.optString("status") != "completed" }.map { GraphMapping.task(it, list.id, zone) }
+        }
+        return Snapshot(1, accountKey, Instant.now().toString(), zone.id, lists, tasks, sort)
+    }
+
+    /** Every item of a collection, following `@odata.nextLink` (only to Graph itself: it carries the token). */
+    private suspend fun getAll(first: HttpUrl, zone: ZoneId): List<JSONObject> {
+        val items = mutableListOf<JSONObject>()
+        var next: HttpUrl? = first
+        while (next != null) {
+            val page = requireNotNull(send("GET", next, null, zone)) { "Graph returned no page" }
+            val value = page.optJSONArray("value")
+            if (value != null) for (i in 0 until value.length()) items += value.getJSONObject(i)
+            next = page.optString("@odata.nextLink").takeIf { it.isNotEmpty() }?.toHttpUrl()?.takeIf { it.host == BASE.host }
+        }
+        return items
+    }
+
     private fun tasksUrl(listId: String): HttpUrl =
         BASE.newBuilder().addPathSegments("me/todo/lists").addPathSegment(listId).addPathSegment("tasks").build()
 
     private fun taskUrl(listId: String, taskId: String): HttpUrl =
         tasksUrl(listId).newBuilder().addPathSegment(taskId).build()
 
-    private suspend fun send(method: String, url: HttpUrl, body: JSONObject?): JSONObject? {
+    private suspend fun send(method: String, url: HttpUrl, body: JSONObject?, zone: ZoneId = this.zone): JSONObject? {
         val token = tokens()
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()

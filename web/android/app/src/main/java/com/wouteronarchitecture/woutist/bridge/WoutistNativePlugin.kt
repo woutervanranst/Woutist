@@ -22,6 +22,7 @@ import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.reminders.Notifications
 import com.wouteronarchitecture.woutist.reminders.ReminderScheduler
+import com.wouteronarchitecture.woutist.work.RefreshWorker
 import com.wouteronarchitecture.woutist.work.TaskOpWorker
 
 /** JS bridge for reminders, the widget and notification taps; the JS side is `WoutistNative` in `plugins.ts`. */
@@ -62,12 +63,14 @@ class WoutistNativePlugin : Plugin() {
         store.replaceBase(snapshot)
         // Work that stopped on "sign in required" can go now, without waiting out its backoff.
         if (wasWaitingForSignIn) store.pending().forEach { TaskOpWorker.enqueue(context, it.id, ExistingWorkPolicy.REPLACE) }
+        RefreshWorker.schedule(context)
         call.resolve()
     }
 
     @PluginMethod
     fun clear(call: PluginCall) {
         TaskOpWorker.cancelAll(context)
+        RefreshWorker.cancel(context)
         store.clear()
         NotificationManagerCompat.from(context).cancelAll()
         call.resolve()

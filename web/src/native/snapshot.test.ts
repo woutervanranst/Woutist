@@ -46,6 +46,14 @@ describe('buildSnapshot', () => {
   })
 })
 
+describe('buildSnapshot outbox', () => {
+  it('flagsUnsentChanges', () => {
+    const base = { accountKey: 'oid.tid', lists: [], tasks: [], sort: {}, now, timeZone: 'Europe/Brussels' }
+    expect(buildSnapshot(base).outboxPending).toBe(false)
+    expect(buildSnapshot({ ...base, outboxPending: true }).outboxPending).toBe(true)
+  })
+})
+
 describe('remindersFromSnapshot', () => {
   it('remindersMatchFixture', () => {
     expect(remindersFromSnapshot(fixtureInput as NativeSnapshot, now)).toEqual(expected)

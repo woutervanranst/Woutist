@@ -15,6 +15,8 @@ data class Snapshot(
     val lists: List<SnapList>,
     val tasks: List<SnapTask>,
     val sort: Map<String, SortPref>,
+    /** The app has local changes Graph doesn't have yet: a background refresh must not replace this. */
+    val outboxPending: Boolean = false,
 ) {
     fun toJson(): String = JSONObject()
         .put("version", version)
@@ -24,6 +26,7 @@ data class Snapshot(
         .put("lists", JSONArray(lists.map { JSONObject().put("id", it.id).put("name", it.name).put("wellknownListName", it.wellknownListName) }))
         .put("tasks", JSONArray(tasks.map { it.toJson() }))
         .put("sort", JSONObject().apply { sort.forEach { (k, v) -> put(k, JSONObject().put("key", v.key).put("dir", v.dir)) } })
+        .put("outboxPending", outboxPending)
         .toString()
 
     companion object {
@@ -45,6 +48,7 @@ data class Snapshot(
                 sort = sort.keys().asSequence().associateWith { k ->
                     sort.getJSONObject(k).let { SortPref(it.getString("key"), it.getString("dir")) }
                 },
+                outboxPending = o.optBoolean("outboxPending"),
             )
         }
     }

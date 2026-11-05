@@ -69,6 +69,12 @@ describe('NativeBridge', () => {
     expect(native.setSnapshot).toHaveBeenCalledTimes(1)
   })
 
+  it('tells the phone about changes that have not reached Graph yet', async () => {
+    bridge.start()
+    await db.outbox.add({ type: 'task.create', listId: 'L1', taskId: 'tmp_x', createdAt: 0, attempts: 0, nextAttemptAt: 0 })
+    await waitFor(() => expect((lastSnapshot() as unknown as { outboxPending: boolean }).outboxPending).toBe(true))
+  })
+
   it('syncs when the phone changed something in Graph', async () => {
     bridge.start()
     await waitFor(() => expect(native.listeners.has('changed')).toBe(true))

@@ -15,7 +15,7 @@ export class NativeBridge {
   private readonly accountKey: string
   private readonly debounceMs: number
   private running = false
-  private data: { lists: TodoList[]; tasks: Task[] } | null = null
+  private data: { lists: TodoList[]; tasks: Task[]; outbox: number } | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   private lastPushed: string | null = null
   private cleanups: (() => void)[] = []
@@ -30,9 +30,9 @@ export class NativeBridge {
     if (this.running) return
     this.running = true
     const { db, engine } = this.services
-    const sub = liveQuery(() => Promise.all([db.lists.toArray(), db.tasks.toArray()])).subscribe({
-      next: ([lists, tasks]) => {
-        this.data = { lists, tasks }
+    const sub = liveQuery(() => Promise.all([db.lists.toArray(), db.tasks.toArray(), db.outbox.count()])).subscribe({
+      next: ([lists, tasks, outbox]) => {
+        this.data = { lists, tasks, outbox }
         this.schedule()
       },
       error: (error) => console.warn('Watching the local database failed', error),
@@ -70,6 +70,7 @@ export class NativeBridge {
       sort: readPrefs(this.accountKey).sort,
       now: new Date(),
       timeZone: userTimeZone(),
+      outboxPending: this.data.outbox > 0,
     })
     const content = JSON.stringify({ ...snapshot, generatedAt: '' })
     if (content === this.lastPushed) return

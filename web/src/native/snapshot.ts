@@ -15,6 +15,8 @@ export interface NativeSnapshot {
   lists: { id: string; name: string; wellknownListName: WellknownListName }[]
   tasks: NativeSnapshotTask[]
   sort: Record<string, SortPref>
+  /** Local changes not in Graph yet: the phone's background refresh must not replace this snapshot. */
+  outboxPending: boolean
 }
 
 export interface NativeSnapshotTask {
@@ -42,6 +44,7 @@ export function buildSnapshot(input: {
   sort: Prefs['sort']
   now: Date
   timeZone: string
+  outboxPending?: boolean
 }): NativeSnapshot {
   const lists = input.lists
     .filter((l) => !isTempId(l.id))
@@ -67,6 +70,7 @@ export function buildSnapshot(input: {
     lists,
     tasks,
     sort: input.sort,
+    outboxPending: input.outboxPending ?? false,
   }
 }
 

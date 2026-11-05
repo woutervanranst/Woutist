@@ -34,6 +34,8 @@ class TaskOpWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = GraphApi({ AuthManager.tokenSilent(GRAPH_SCOPES) })
         val outcome = execute(store, graph, opId) { NativeEvents.changed() }
         Log.i("Woutist", "Pending operation $opId: $outcome (attempt ${runAttemptCount + 1})")
+        // A recurring task comes back with its next date; Graph has the details.
+        if (outcome == OpOutcome.Success) RefreshWorker.refreshSoon(applicationContext)
         return when (outcome) {
             OpOutcome.Success, OpOutcome.Dropped -> Result.success()
             OpOutcome.Retry -> Result.retry()

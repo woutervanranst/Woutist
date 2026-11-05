@@ -25,7 +25,21 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
         set(value) = mutate { signInFlag = value; saveFlags() }
 
     /** The app's latest snapshot. Another account's snapshot first drops this account's pending operations. */
-    fun replaceBase(s: Snapshot) = mutate {
+    fun replaceBase(s: Snapshot) = mutate { replace(s) }
+
+    /** [replaceBase], unless the base changed since [generatedAt] was read (a newer snapshot wins). */
+    fun replaceBaseIfUnchanged(generatedAt: String, s: Snapshot): Boolean {
+        var replaced = false
+        mutate {
+            if (base?.generatedAt == generatedAt) {
+                replace(s)
+                replaced = true
+            }
+        }
+        return replaced
+    }
+
+    private fun replace(s: Snapshot) {
         if (base?.accountKey != null && base?.accountKey != s.accountKey) {
             ops = emptyList()
             savePending()
