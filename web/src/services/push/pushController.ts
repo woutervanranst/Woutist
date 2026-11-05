@@ -15,6 +15,24 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 }
 
 /**
+ * Turn a PushManager.subscribe() failure into something the user can act on. Chromium throws an
+ * AbortError ("Registration failed - push service error") when its push service can't register,
+ * which in Brave is almost always because Google's push service is switched off by default.
+ */
+export function explainSubscribeError(error: unknown, isBrave: boolean): Error {
+  if (error instanceof DOMException) {
+    if (error.name !== 'AbortError') return error
+  } else {
+    return error instanceof Error ? error : new Error(String(error))
+  }
+  return new Error(
+    isBrave
+      ? 'Brave blocks push notifications by default. Turn on "Use Google services for push messaging" at brave://settings/privacy, restart Brave, then try again.'
+      : `This browser couldn't register with its push service (${error.message}). Check your connection and try again.`,
+  )
+}
+
+/**
  * Web Push for reminders on this device. The server only learns the ids and times of upcoming
  * reminders; titles are looked up locally by the service worker when a push arrives.
  */
@@ -100,10 +118,14 @@ export class PushController {
     const registration = await navigator.serviceWorker.ready
     let sub = await registration.pushManager.getSubscription()
     if (!sub) {
-      sub = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(this.vapidKey),
-      })
+      try {
+        sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(this.vapidKey),
+        })
+      } catch (error) {
+        throw explainSubscribeError(error, 'brave' in navigator)
+      }
     }
     await this.api.putSubscription(sub.toJSON() as PushSubscriptionDto)
   }

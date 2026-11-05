@@ -64,6 +64,7 @@ The API runs on a **standalone Flex Consumption Function App**. SWA "bring your 
 - **Duplicate notifications** while the official To Do app is installed next to Woutist (both fire).
 - Woutist pushes cover reminders that some Woutist device has synced. A task completed elsewhere before that sync can still produce one stale (labelled) notification. The official app's reminders are unaffected.
 - Work/school tenants that only allow consent for verified publishers need an admin to approve the app.
+- **Brave** turns off Google's push service by default, so turning on reminders fails with "Registration failed - push service error". Fix: turn on *Use Google services for push messaging* in `brave://settings/privacy` and restart Brave. Settings shows this hint.
 
 ## Android (next phase)
 
