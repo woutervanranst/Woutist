@@ -87,7 +87,7 @@ const useStyles = makeStyles({
 })
 
 /** Rows rendered at a time. More follow on scrolling (or "Show more"), so long histories stay fast. */
-export const RENDER_STEP = 100
+export const RENDER_STEP = 50
 
 const SORT_LABELS: Record<SortKey, string> = {
   default: 'Creation date (newest first)',
