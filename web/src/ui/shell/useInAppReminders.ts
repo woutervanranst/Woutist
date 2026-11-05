@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useServices } from '../../app/AppServices'
 import { useSearchParams } from 'react-router'
+import { isNative } from '../../platform/native'
 
 /**
  * While the app is open: show reminders that come due (a toast-style callback, plus a system
- * notification when push isn't handling them), and act on "Complete" from a notification.
+ * notification when neither push nor the Android app handles them), and act on "Complete" from a notification.
  */
 export function useInAppReminders(onReminder: (title: string, taskId: string, listId: string) => void) {
   const { db, push, repo } = useServices()
@@ -29,7 +30,8 @@ export function useInAppReminders(onReminder: (title: string, taskId: string, li
         .toArray()
       for (const task of due) {
         onReminder(task.title, task.id, task.listId)
-        const pushHandles = push?.state() === 'on'
+        // On Android the native alarm posts the notification; push handles it in browsers that enabled it.
+        const pushHandles = isNative || push?.state() === 'on'
         if (!pushHandles && document.visibilityState !== 'visible' && Notification?.permission === 'granted') {
           const reg = await navigator.serviceWorker?.getRegistration()
           await reg?.showNotification(task.title, {

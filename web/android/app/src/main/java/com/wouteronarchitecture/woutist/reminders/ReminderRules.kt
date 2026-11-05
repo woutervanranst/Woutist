@@ -1,0 +1,28 @@
+package com.wouteronarchitecture.woutist.reminders
+
+import com.wouteronarchitecture.woutist.data.PendingOp
+import com.wouteronarchitecture.woutist.data.Snapshot
+import java.time.Duration
+import java.time.Instant
+
+/** An alarm to arm. [key] is the task id, or `snooze:<taskId>` for a snoozed reminder. */
+data class Reminder(val taskId: String, val listId: String, val fireAt: Instant, val key: String = taskId)
+
+/** Same rules as `web/src/services/push/reminders.ts` (`upcomingReminders`). */
+object ReminderRules {
+    private val GRACE: Duration = Duration.ofSeconds(60)
+    private val HORIZON: Duration = Duration.ofDays(90)
+    private const val MAX = 1000
+
+    fun desired(s: Snapshot, now: Instant): List<Reminder> {
+        val from = now.minus(GRACE)
+        val until = now.plus(HORIZON)
+        return s.tasks.asSequence()
+            .filter { it.reminderAt != null && !it.id.startsWith("tmp_") && !it.id.startsWith(PendingOp.NATIVE_TMP_PREFIX) }
+            .map { Reminder(it.id, it.listId, Instant.parse(it.reminderAt)) }
+            .filter { it.fireAt > from && it.fireAt <= until }
+            .sortedWith(compareBy<Reminder> { it.fireAt }.thenBy { it.taskId })
+            .take(MAX)
+            .toList()
+    }
+}

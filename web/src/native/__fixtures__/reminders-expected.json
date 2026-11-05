@@ -1,0 +1,6 @@
+[
+  { "taskId": "task-grace", "listId": "L1", "fireAt": "2026-11-05T07:59:30.000Z" },
+  { "taskId": "task-a", "listId": "L2", "fireAt": "2026-11-05T09:00:00.000Z" },
+  { "taskId": "task-b", "listId": "L1", "fireAt": "2026-11-05T09:00:00.000Z" },
+  { "taskId": "task-90d", "listId": "L1", "fireAt": "2027-02-03T08:00:00.000Z" }
+]

@@ -33,6 +33,10 @@ android {
             }
         }
     }
+    testOptions {
+        // Local unit tests run on the JVM: android.util.Log and friends return defaults instead of throwing.
+        unitTests.returnDefaultValues = true
+    }
     buildTypes {
         debug {
             // "Woutist dev" installs next to the release app, so testing never wipes the daily install.
@@ -54,6 +58,8 @@ kotlin {
     jvmToolchain(21)
 }
 
+android.sourceSets.test.resources.srcDirs += '../../src/native/__fixtures__' 
+
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
@@ -68,7 +74,11 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "com.microsoft.identity.client:msal:8.6.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
+    implementation "androidx.work:work-runtime-ktx:2.12.0"
+    implementation "com.squareup.okhttp3:okhttp:5.4.0"
     testImplementation "junit:junit:$junitVersion"
+    // Android's org.json is a stub in local unit tests; use the real one there.
+    testImplementation "org.json:json:20250517"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

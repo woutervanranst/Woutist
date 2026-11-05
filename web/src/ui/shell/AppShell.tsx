@@ -35,18 +35,21 @@ import { useMediaQuery } from '../../app/theme'
 import type { SmartListId } from '../../models/views'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { NotificationSettings } from '../settings/NotificationSettings'
-import { useServiceWorkerNavigation } from '../../platform/pwa'
+import { usePlatformNavigation } from '../../platform/navigation'
 import { useInAppReminders } from './useInAppReminders'
 import { Sidebar } from '../sidebar/Sidebar'
 import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
 import { TaskListView } from '../taskList/TaskListView'
-import { useLists, useSelectedTask, useSyncStatus } from '../hooks'
+import { useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
+import { isNative } from '../../platform/native'
+import { ReminderHealthBanner } from './ReminderHealthBanner'
 
 const useStyles = makeStyles({
   root: {
     height: '100dvh',
     display: 'grid',
-    gridTemplateRows: 'auto minmax(0, 1fr)',
+    // Header, reminder banner (Android), body.
+    gridTemplateRows: 'auto auto minmax(0, 1fr)',
     // Without an explicit minmax(0, …) column the grid grows to the widest unbreakable content
     // (long URL titles, the header's controls) and the page overflows the viewport.
     gridTemplateColumns: 'minmax(0, 1fr)',
@@ -87,7 +90,7 @@ const useStyles = makeStyles({
 export function AppShell() {
   const styles = useStyles()
   const { dispatchToast } = useToastController('app')
-  useServiceWorkerNavigation()
+  usePlatformNavigation()
   useInAppReminders(
     useCallback(
       (title: string) =>
@@ -153,6 +156,9 @@ export function AppShell() {
         </Tooltip>
         <AccountMenu />
       </header>
+
+      {/* Always rendered so the body keeps the 1fr row. */}
+      <div>{isNative && <NativeReminderBanner />}</div>
 
       <div className={styles.body}>
         {showSidebarInline && !hideSidebarForDetail && (
@@ -366,4 +372,9 @@ function AccountMenu() {
       </MenuPopover>
     </Menu>
   )
+}
+
+function NativeReminderBanner() {
+  const { accountKey } = useServices()
+  return <ReminderHealthBanner accountKey={accountKey} active={useHasUpcomingReminders()} />
 }

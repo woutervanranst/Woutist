@@ -65,15 +65,22 @@ export function clearPrefs(accountKey: string) {
   }
 }
 
+/** Current preferences of an account, outside React (e.g. for the Android app's snapshot). */
+export function readPrefs(accountKey: string): Prefs {
+  return read(accountKey)
+}
+
+/** Called after any account's preferences change. */
+export function subscribePrefs(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
 /** UI preferences for the signed-in account (kept in localStorage; never synced to Graph). */
 export function usePrefs(accountKey: string): [Prefs, (update: (p: Prefs) => Prefs) => void] {
-  const prefs = useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb)
-      return () => listeners.delete(cb)
-    },
-    () => read(accountKey),
-  )
+  const prefs = useSyncExternalStore(subscribePrefs, () => read(accountKey))
   const update = useCallback(
     (fn: (p: Prefs) => Prefs) => write(accountKey, fn(read(accountKey))),
     [accountKey],

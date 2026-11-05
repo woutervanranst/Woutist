@@ -93,3 +93,16 @@ export function useSelectedTask(): [string | null, (taskId: string | null) => vo
 
   return [taskId, select]
 }
+
+/** Whether an open task has a reminder still ahead (the Android app only nags about reminder settings then). */
+export function useHasUpcomingReminders(): boolean {
+  const { db } = useServices()
+  const count = useLiveQuery(
+    () =>
+      db.tasks
+        .filter((t) => t.isReminderOn && !t.completed && t.reminderAt !== null && Date.parse(t.reminderAt) > Date.now())
+        .count(),
+    [db],
+  )
+  return (count ?? 0) > 0
+}
