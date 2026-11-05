@@ -30,15 +30,25 @@ export function viewKey(view: ViewRef): string {
 
 const norm = (s: string) => s.toLocaleLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu, '')
 
+const searchTexts = new WeakMap<Task, string>()
+
+/**
+ * A task's searchable text (title, notes, steps, categories), normalized once per task object.
+ * Stored tasks are replaced on change, never mutated, so a cached text can't go stale; one field per
+ * line, so a query (which has no line breaks) never matches across fields.
+ */
+export function searchText(task: Task): string {
+  let text = searchTexts.get(task)
+  if (text === undefined) {
+    text = norm([task.title, task.body, ...task.steps.map((s) => s.displayName), ...task.categories].join('\n'))
+    searchTexts.set(task, text)
+  }
+  return text
+}
+
 export function matchesSearch(task: Task, query: string): boolean {
   const q = norm(query.trim())
-  if (!q) return false
-  return (
-    norm(task.title).includes(q) ||
-    norm(task.body).includes(q) ||
-    task.steps.some((s) => norm(s.displayName).includes(q)) ||
-    task.categories.some((c) => norm(c).includes(q))
-  )
+  return q !== '' && searchText(task).includes(q)
 }
 
 export function isPlanned(task: Task): boolean {
@@ -52,9 +62,11 @@ export function tasksForView(view: ViewRef, tasks: Task[]): { open: Task[]; comp
     case 'list':
       selected = tasks.filter((t) => t.listId === view.listId)
       break
-    case 'search':
-      selected = tasks.filter((t) => matchesSearch(t, view.query))
+    case 'search': {
+      const q = norm(view.query.trim())
+      selected = q ? tasks.filter((t) => searchText(t).includes(q)) : []
       break
+    }
     case 'smart':
       switch (view.id) {
         case 'important':
@@ -114,6 +126,18 @@ export function groupPlanned(
   }
   const order: PlannedGroup[] = ['earlier', 'today', 'tomorrow', 'thisWeek', 'later']
   return order.filter((g) => groups.has(g)).map((g) => ({ group: g, tasks: groups.get(g)! }))
+}
+
+/** The first `limit` tasks of grouped tasks, in order, dropping groups that end up empty. */
+export function limitGroups<G extends { tasks: Task[] }>(groups: G[], limit: number): G[] {
+  const result: G[] = []
+  let left = limit
+  for (const g of groups) {
+    if (left <= 0) break
+    result.push(g.tasks.length <= left ? g : { ...g, tasks: g.tasks.slice(0, left) })
+    left -= g.tasks.length
+  }
+  return result
 }
 
 const IMPORTANCE_RANK = { high: 0, normal: 1, low: 2 } as const
