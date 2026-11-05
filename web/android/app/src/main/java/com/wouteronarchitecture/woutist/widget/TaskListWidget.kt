@@ -51,6 +51,7 @@ import com.wouteronarchitecture.woutist.data.PendingOp
 import com.wouteronarchitecture.woutist.data.SnapTask
 import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
+import com.wouteronarchitecture.woutist.quickadd.QuickAddActivity
 import com.wouteronarchitecture.woutist.reminders.Notifications
 import com.wouteronarchitecture.woutist.work.TaskOpWorker
 import kotlinx.coroutines.CoroutineScope
@@ -109,8 +110,23 @@ private fun WidgetBody(context: Context, snapshot: Snapshot?, source: WidgetSour
             Text(
                 WidgetContent.title(snapshot, source),
                 maxLines = 1,
+                modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = WidgetColors.brand, fontSize = 17.sp, fontWeight = FontWeight.Bold),
             )
+            if (snapshot != null) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_widget_add),
+                    contentDescription = "Add a task",
+                    colorFilter = ColorFilter.tint(WidgetColors.brand),
+                    modifier = GlanceModifier.size(28.dp).padding(2.dp).clickable(
+                        actionStartActivity(
+                            Intent(context, QuickAddActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                .putExtra(QuickAddActivity.EXTRA_SOURCE, source.toJson()),
+                        ),
+                    ),
+                )
+            }
         }
         when {
             snapshot == null -> Message(context, "Open Woutist to sign in")

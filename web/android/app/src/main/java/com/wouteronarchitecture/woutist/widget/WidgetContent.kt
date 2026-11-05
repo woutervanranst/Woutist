@@ -81,6 +81,15 @@ object WidgetContent {
 
     fun listName(s: Snapshot, listId: String): String = s.lists.firstOrNull { it.id == listId }?.name.orEmpty()
 
+    /** The list a widget's tasks come from, or new ones go to: Tasks for smart lists and unknown ids. */
+    fun listIdFor(s: Snapshot, source: WidgetSource): String? {
+        val default = s.lists.firstOrNull { it.wellknownListName == "defaultList" }?.id
+        return when (source) {
+            is WidgetSource.List -> source.listId.takeIf { id -> s.lists.any { it.id == id } } ?: default
+            is WidgetSource.Smart -> default
+        }
+    }
+
     private fun resolve(s: Snapshot, source: WidgetSource): WidgetSource = when (source) {
         is WidgetSource.Smart -> source
         is WidgetSource.List ->

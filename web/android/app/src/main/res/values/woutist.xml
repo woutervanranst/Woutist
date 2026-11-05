@@ -6,5 +6,8 @@
     <string name="action_complete">Complete</string>
     <string name="action_snooze">Snooze</string>
     <string name="widget_name">Task list</string>
+    <string name="shortcut_add_short">Add a task</string>
+    <string name="shortcut_add_long">Add a task</string>
+    <string name="quick_add_label">Add to Woutist</string>
     <string name="widget_description">Your open tasks from a list, Important or Planned</string>
 </resources>
