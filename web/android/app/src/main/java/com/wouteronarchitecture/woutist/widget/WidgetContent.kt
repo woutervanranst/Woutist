@@ -122,7 +122,7 @@ object WidgetContent {
     }
 
     /** Like JS encodeURIComponent for Graph ids (letters, digits, `-`, `_`, `=`). */
-    private fun encode(value: String) = URLEncoder.encode(value, Charsets.UTF_8).replace("+", "%20")
+    private fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     private fun rank(t: SnapTask) = if (t.important) 0 else 1
 

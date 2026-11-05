@@ -86,6 +86,54 @@ npm run build -w @woutist/api
 az functionapp deployment source config-zip -g rg-woutist -n func-woutist --src api/deploy.zip
 ```
 
+## Android app
+
+**Develop** (JDK 21 at `/opt/homebrew/opt/openjdk@21`, Android SDK path in `web/android/local.properties`, phone with USB debugging):
+
+```bash
+npm run android:run -w @woutist/web   # build the web app, sync Capacitor, install and start "Woutist dev"
+```
+
+Debug builds also accept `adb shell am broadcast -a com.wouteronarchitecture.woutist.DEBUG_REFRESH -p com.wouteronarchitecture.woutist.debug`, which runs a background refresh now.
+
+**Release.** Push a tag and CI does the rest:
+
+```bash
+git tag android-v0.2.0 && git push origin android-v0.2.0
+```
+
+The `android-release` job (environment `production`) builds the web app, signs `assembleRelease` with the `ANDROID_*` secrets and attaches `woutist-0.2.0.apk` to the GitHub Release `android-v0.2.0`. `versionCode` is the workflow run number and `versionName` is the tag without `android-v`. The `production` environment must allow tags `android-v*` (Settings → Environments → production → Deployment branches and tags), next to `main`. `android-test` (unit tests and lint) runs on every push and PR.
+
+**Install** the APK from the Release page on the phone (allow installs from the browser), or `adb install woutist-0.2.0.apk`. Updates install over it as long as they're signed with the same key.
+
+### Release key custody
+
+| What | Where |
+|---|---|
+| Keystore (PKCS12, alias `woutist`, RSA 4096, valid 10000 days) | `~/.woutist/woutist-release.jks` on the owner's Mac. Never in git (`*.jks` is ignored) |
+| Password (store and key share one) | macOS Keychain, service `woutist-android-keystore`: `security find-generic-password -s woutist-android-keystore -w` |
+| CI copy | `production` environment secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` |
+
+**Back it up.** Keep the `.jks` file and its password somewhere outside this Mac, for example as a document in a password manager. GitHub secrets can't be read back. Without the key, no update can be installed over an existing Woutist: everyone would have to uninstall and install a newly signed build. Nothing is lost when that happens, because Graph holds all the data.
+
+Build a signed APK locally:
+
+```bash
+cd web/android
+export WOUTIST_KEYSTORE_PATH=~/.woutist/woutist-release.jks WOUTIST_KEY_ALIAS=woutist
+export WOUTIST_KEYSTORE_PASSWORD="$(security find-generic-password -s woutist-android-keystore -w)" WOUTIST_KEY_PASSWORD="$WOUTIST_KEYSTORE_PASSWORD"
+./gradlew assembleRelease
+```
+
+**Rotating** the key, only if it leaks:
+
+1. Create a new keystore.
+2. Compute its hash and register the new redirect URI (`entra-app-registration.md`).
+3. Update `src/release/res/raw/msal_config.json` and `msalSignatureHash` in `app/build.gradle`.
+4. Replace the four secrets.
+
+Installed copies must then be uninstalled and reinstalled.
+
 ## Rotating the VAPID keys
 
 ```bash

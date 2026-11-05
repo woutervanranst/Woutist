@@ -1,6 +1,6 @@
 # Woutist
 
-A Microsoft To Do client for the web (installable PWA, Android later) built directly on Microsoft Graph.
+A Microsoft To Do client for the web (installable PWA) and Android, built directly on Microsoft Graph.
 
 Live at **https://woutist.wouteronarchitecture.com**.
 
@@ -8,11 +8,23 @@ Live at **https://woutist.wouteronarchitecture.com**.
 - **Offline-first.** Data is cached in IndexedDB and changes queue in an outbox while offline.
 - **Push reminders** come from a small Azure Functions scheduler that never touches Graph.
 
+## Android
+
+Download `woutist-<version>.apk` from the [latest Android release](https://github.com/woutervanranst/Woutist/releases) on your phone, install it, and sign in with your Microsoft account. You get:
+
+- reminders scheduled on the phone, with Complete and Snooze
+- a home-screen task list widget
+- an "Add a task" shortcut
+- Share to Woutist
+
+To build from source, see [deployment](docs/deployment.md#android-app).
+
 ## Repo layout
 
 | Path | What |
 |---|---|
 | `web/` | Vite + React + TypeScript SPA (Fluent UI v9, MSAL, Graph SDK, Dexie) |
+| `web/android/` | Capacitor Android app: native sign-in, reminders, widget, quick add (Kotlin) |
 | `api/` | Azure Functions v4 reminder/push API (Flex Consumption) |
 | `packages/contracts/` | DTOs shared by web and api |
 | `docs/` | Architecture, Entra registration, Graph notes, deployment |

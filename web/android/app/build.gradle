@@ -10,8 +10,9 @@ android {
         applicationId "com.wouteronarchitecture.woutist"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // CI sets these for releases (run number, and the tag without "android-v").
+        versionCode = (System.getenv('WOUTIST_VERSION_CODE') ?: '1').toInteger()
+        versionName = System.getenv('WOUTIST_VERSION_NAME') ?: '0.0.0-dev'
         // MSAL redirect: msauth://<applicationId>/<signature hash>. The hash belongs to the signing key.
         manifestPlaceholders = [msalSignatureHash: "set-per-build-type"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -38,6 +39,10 @@ android {
     buildFeatures {
         compose = true
     }
+    compileOptions {
+        // java.time (reminders, Graph dates) on Android 7 (minSdk 24) through core library desugaring.
+        coreLibraryDesugaringEnabled true
+    }
     testOptions {
         // Local unit tests run on the JVM: android.util.Log and friends return defaults instead of throwing.
         unitTests.returnDefaultValues = true
@@ -52,6 +57,8 @@ android {
         }
         release {
             resValue "string", "app_name", "Woutist"
+            // Release keystore (~/.woutist on the owner's Mac, ANDROID_KEYSTORE_* secrets in CI).
+            manifestPlaceholders = [msalSignatureHash: "EYzsp39WW7UlHrR5kTI6uzLtDkQ="]
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (releaseSigning) signingConfig signingConfigs.release
@@ -81,6 +88,7 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
     implementation "androidx.work:work-runtime-ktx:2.12.0"
     implementation "androidx.glance:glance-appwidget:1.2.0"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
     testImplementation "junit:junit:$junitVersion"
     // Android's org.json is a stub in local unit tests; use the real one there.

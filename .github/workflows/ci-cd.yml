@@ -3,6 +3,8 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    # Android releases: pushing android-v<version> builds the signed APK and attaches it to a GitHub Release.
+    tags: ['android-v*']
   pull_request:
   workflow_dispatch:
 
@@ -116,3 +118,78 @@ jobs:
           app-name: func-woutist
           package: api-deploy
           sku: flexconsumption
+
+  android-test:
+    name: Android unit tests and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - run: npm run build -w @woutist/web
+      - run: npx cap sync android
+        working-directory: web
+      - run: ./gradlew testDebugUnitTest lintDebug
+        working-directory: web/android
+
+  android-release:
+    name: Android release APK
+    if: startsWith(github.ref, 'refs/tags/android-v')
+    needs: [android-test, secrets-scan]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    permissions:
+      contents: write # attach the APK to the GitHub Release for the tag
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Version from the tag
+        id: version
+        run: echo "name=${GITHUB_REF_NAME#android-v}" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run build -w @woutist/web
+      - run: npx cap sync android
+        working-directory: web
+      - name: Build the signed APK
+        working-directory: web/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          WOUTIST_KEYSTORE_PATH: ${{ runner.temp }}/woutist-release.jks
+          WOUTIST_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          WOUTIST_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          WOUTIST_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          WOUTIST_VERSION_CODE: ${{ github.run_number }}
+          WOUTIST_VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$WOUTIST_KEYSTORE_PATH"
+          trap 'rm -f "$WOUTIST_KEYSTORE_PATH"' EXIT
+          ./gradlew assembleRelease
+          # Unsigned builds are named app-release-unsigned.apk; insist on the signed one.
+          test -f app/build/outputs/apk/release/app-release.apk
+      - name: Attach to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          cp web/android/app/build/outputs/apk/release/app-release.apk "woutist-${VERSION}.apk"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" \
+            --title "Woutist for Android ${VERSION}" \
+            --notes "Signed Android APK. Install it on your phone (allow installs from your browser or file manager), then sign in with your Microsoft account."
+          gh release upload "$GITHUB_REF_NAME" "woutist-${VERSION}.apk" --clobber
