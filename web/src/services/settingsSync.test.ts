@@ -18,7 +18,7 @@ let tasksList: string
 let accountKey: string
 let counter = 0
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 beforeEach(async () => {
   fake = new FakeGraph()
