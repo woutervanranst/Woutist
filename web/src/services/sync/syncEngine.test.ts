@@ -14,7 +14,7 @@ let engine: SyncEngine
 let repo: TodoRepository
 let dbCounter = 0
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
 beforeEach(async () => {
   fake = new FakeGraph()
