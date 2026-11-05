@@ -26,9 +26,9 @@ class TaskOpWorkerTest {
             fail?.let { throw it }
             completed += taskId
         }
-        override suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, notes: String?): SnapTask {
+        override suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, reminderAt: String?, notes: String?): SnapTask {
             fail?.let { throw it }
-            return SnapTask("server-id", listId, title, important, dueDate, null, "2026-11-05T08:00:00Z", false)
+            return SnapTask("server-id", listId, title, important, dueDate, reminderAt, "2026-11-05T08:00:00Z", false)
         }
     }
 

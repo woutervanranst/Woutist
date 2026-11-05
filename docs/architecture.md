@@ -82,7 +82,7 @@ The same React app runs in a Capacitor 8 shell. Two builds install side by side:
 
 **Background refresh.** `RefreshWorker` reads lists and open tasks from Graph every 30 minutes (Android may stretch this) and right after a native operation, so reminders set in the official app or on the web get armed while Woutist is closed. It leaves the snapshot alone while the app has unsent changes, or if the app pushed a newer one during the fetch.
 
-**Widget and quick add.** A Glance widget shows a list, Important or Planned in the app's sort order (same rules as `widgetTasks`, checked against a shared fixture). Ticking completes a task; tapping opens it. Its "+", the app icon's **Add a task** shortcut and **Share to Woutist** open a small dialog over the home screen. A task added from Important is starred; one added from Planned is due today.
+**Widget and quick add.** A Glance widget shows a list, Important or Planned in the app's sort order (same rules as `widgetTasks`, checked against a shared fixture). Ticking completes a task; tapping opens it. Its "+", the app icon's **Add a task** shortcut and **Share to Woutist** open a small dialog over the home screen. Like the official app, the dialog can set a due date and a reminder (the app's presets: today, tomorrow, next week, later today, or a picked date and time). A task added from Important is starred; one added from Planned starts due today.
 
 **Settings** show whether notifications, exact reminders and unrestricted background activity are allowed, with a button for each. A banner asks to fix them while reminders are pending.
 

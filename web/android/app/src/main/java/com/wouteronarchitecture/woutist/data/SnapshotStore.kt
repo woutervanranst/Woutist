@@ -63,7 +63,7 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
         val b = base ?: return null
         val completed = ops.filterIsInstance<PendingOp.Complete>().map { it.taskId }.toSet()
         val created = ops.filterIsInstance<PendingOp.Create>().map {
-            SnapTask(it.tempTaskId, it.listId, it.title, it.important, it.dueDate, null, it.createdAt, false)
+            SnapTask(it.tempTaskId, it.listId, it.title, it.important, it.dueDate, it.reminderAt, it.createdAt, false)
         }
         b.copy(tasks = b.tasks.filter { it.id !in completed } + created)
     }

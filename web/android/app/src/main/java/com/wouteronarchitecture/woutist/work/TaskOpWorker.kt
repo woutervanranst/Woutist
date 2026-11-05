@@ -56,7 +56,7 @@ class TaskOpWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         store.removePending(op.id)
                     }
                     is PendingOp.Create -> {
-                        val created = graph.createTask(op.listId, op.title, op.important, op.dueDate, op.notes)
+                        val created = graph.createTask(op.listId, op.title, op.important, op.dueDate, op.reminderAt, op.notes)
                         store.removePending(op.id, created)
                     }
                 }

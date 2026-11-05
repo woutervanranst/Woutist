@@ -11,12 +11,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 /** The Graph calls native code makes. Only native To Do fields are written. */
 interface TaskGraph {
     suspend fun completeTask(listId: String, taskId: String)
-    suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, notes: String?): SnapTask
+    suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, reminderAt: String?, notes: String?): SnapTask
 }
 
 /** Graph answered with a non-success status. */
@@ -33,10 +35,17 @@ class GraphApi(
         send("PATCH", taskUrl(listId, taskId), JSONObject().put("status", "completed"))
     }
 
-    override suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, notes: String?): SnapTask {
+    override suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, reminderAt: String?, notes: String?): SnapTask {
         val body = JSONObject().put("title", title)
         if (important) body.put("importance", "high")
         if (dueDate != null) body.put("dueDateTime", JSONObject().put("dateTime", "${dueDate}T00:00:00").put("timeZone", zone.id))
+        val reminder = reminderAt?.let(Instant::parse)
+        if (reminder != null) {
+            // Wall-clock time in the phone's zone, as the web app writes it.
+            val wall = reminder.atZone(zone).toLocalDateTime().truncatedTo(ChronoUnit.SECONDS)
+            body.put("isReminderOn", true)
+            body.put("reminderDateTime", JSONObject().put("dateTime", WALL.format(wall)).put("timeZone", zone.id))
+        }
         if (!notes.isNullOrBlank()) body.put("body", JSONObject().put("content", notes).put("contentType", "text"))
         val created = requireNotNull(send("POST", tasksUrl(listId), body)) { "Graph returned no task" }
         return SnapTask(
@@ -45,7 +54,7 @@ class GraphApi(
             title = created.optString("title", title),
             important = important,
             dueDate = dueDate,
-            reminderAt = null,
+            reminderAt = reminder?.toString(),
             createdDateTime = created.optString("createdDateTime"),
             recurring = false,
         )
@@ -101,6 +110,7 @@ class GraphApi(
     companion object {
         private val BASE = "https://graph.microsoft.com/v1.0".toHttpUrl()
         private val JSON = "application/json".toMediaType()
+        private val WALL = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
         private val sharedClient by lazy {
             OkHttpClient.Builder().callTimeout(30, TimeUnit.SECONDS).build()
         }
