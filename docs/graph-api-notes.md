@@ -20,5 +20,6 @@ Checked against the live API (v1.0) with a personal Microsoft account on 2026-11
 | `GET …/tasks?$filter=status ne 'completed'` (2026-11-05) | Works: only open tasks | The Android app's background refresh reads open tasks only |
 | `GET …/tasks?$select=…` (2026-11-05) | **Any `$select` that includes `title` returns 400 `invalidRequest`**; selects without `title` work | The Android refresh reads full tasks (no `$select`) and maps only what it needs |
 | Optional task fields (`dueDateTime`, `reminderDateTime`, `recurrence`, `completedDateTime`) | Omitted when not set (no key) | Mappers treat a missing key as null |
+| Open extensions on a list (`POST/GET/PATCH /me/todo/lists/{id}/extensions/{name}`) | Documented for v1.0 with `Tasks.ReadWrite`. Not yet checked live: run the spike (step 8) and record the result here | Woutist's synced settings (quick dates, reminder times) live on the default list |
 
 **Not available in Graph:** My Day, list groups (folders), manual task order, "Assigned to me" (Planner), sharing management.
