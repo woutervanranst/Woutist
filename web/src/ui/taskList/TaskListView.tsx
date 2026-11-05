@@ -18,7 +18,7 @@ import { ChevronDownRegular } from '@fluentui/react-icons/svg/chevron-down'
 import { ChevronRightRegular } from '@fluentui/react-icons/svg/chevron-right'
 import { CircleRegular } from '@fluentui/react-icons/svg/circle'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useServices } from '../../app/AppServices'
 import type { Task, TaskChanges } from '../../models/todo'
 import { todayLocal } from '../../models/time'
@@ -28,6 +28,7 @@ import {
   type SortKey,
   type ViewRef,
   groupPlanned,
+  limitGroups,
   sortTasks,
   tasksForView,
   viewKey,
@@ -85,6 +86,9 @@ const useStyles = makeStyles({
   },
 })
 
+/** Rows rendered at a time. More follow on scrolling (or "Show more"), so long histories stay fast. */
+export const RENDER_STEP = 50
+
 const SORT_LABELS: Record<SortKey, string> = {
   default: 'Creation date (newest first)',
   importance: 'Importance',
@@ -111,7 +115,9 @@ export function TaskListView({ view }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [deleting, setDeleting] = useState<Task | null>(null)
   const addRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const key = viewKey(view)
+  const query = view.kind === 'search' ? view.query : ''
 
   // Has this list (or, for smart views, anything) finished its first sync on this device?
   const everSynced = useLiveQuery(
@@ -139,6 +145,15 @@ export function TaskListView({ view }: Props) {
       ),
     }
   }, [view, tasks, sortKey, sortDir])
+
+  // How many rows to render; back to one batch for another view or search.
+  const batchFor = `${key}\n${query}`
+  const [batch, setBatch] = useState({ for: batchFor, limit: RENDER_STEP })
+  const limit = batch.for === batchFor ? batch.limit : RENDER_STEP
+  const showMore = useCallback(
+    () => setBatch((b) => ({ for: batchFor, limit: (b.for === batchFor ? b.limit : RENDER_STEP) + RENDER_STEP })),
+    [batchFor],
+  )
 
   // Keyboard: "n" focuses the add-task box.
   useEffect(() => {
@@ -213,6 +228,16 @@ export function TaskListView({ view }: Props) {
   })
 
   const planned = view.kind === 'smart' && view.id === 'planned'
+  const completedView = view.kind === 'smart' && view.id === 'completed'
+
+  // Open tasks first, then completed ones, up to `limit` rows. The completed section appears once
+  // every open task is shown; counts always cover everything.
+  const plannedGroups = planned ? groupPlanned(open) : []
+  const openShown = Math.min(open.length, limit)
+  const completedExpanded = completedView || showCompleted
+  const completedShown = openShown < open.length || !completedExpanded ? 0 : Math.min(completed.length, limit - openShown)
+  const left = open.length - openShown + (completedExpanded ? completed.length - completedShown : 0)
+  const more = left > 0 && <ShowMore key="more" left={left} onMore={showMore} root={listRef} />
 
   return (
     <section className={styles.root} aria-label={title}>
@@ -269,33 +294,36 @@ export function TaskListView({ view }: Props) {
         </div>
       )}
 
-      <div className={styles.list}>
+      <div className={styles.list} ref={listRef}>
         {/* One flat list (headers between rows), so a task moving to another group keeps its row and
             an open menu or picker stays open. */}
         {planned
-          ? groupPlanned(open).flatMap((g) => [
+          ? limitGroups(plannedGroups, openShown).flatMap((g, i) => [
               <div key={`group:${g.group}`} className={styles.section}>
-                {PLANNED_GROUP_LABELS[g.group]} <Text size={200}>({g.tasks.length})</Text>
+                {PLANNED_GROUP_LABELS[g.group]} <Text size={200}>({plannedGroups[i].tasks.length})</Text>
               </div>,
               ...g.tasks.map((t) => <TaskRow key={t.id} {...rowProps(t)} />),
             ])
-          : open.map((t) => <TaskRow key={t.id} {...rowProps(t)} />)}
+          : open.slice(0, openShown).map((t) => <TaskRow key={t.id} {...rowProps(t)} />)}
 
-        {view.kind === 'smart' && view.id === 'completed'
-          ? completed.map((t) => <TaskRow key={t.id} {...rowProps(t)} />)
-          : completed.length > 0 && (
-              <CompletedSection
-                count={completed.length}
-                expanded={showCompleted}
-                onToggle={() =>
-                  updatePrefs((p) => ({ ...p, showCompleted: { ...p.showCompleted, [key]: !showCompleted } }))
-                }
-              >
-                {completed.map((t) => (
-                  <TaskRow key={t.id} {...rowProps(t)} />
-                ))}
-              </CompletedSection>
-            )}
+        {openShown < open.length
+          ? more
+          : completedView
+            ? [...completed.slice(0, completedShown).map((t) => <TaskRow key={t.id} {...rowProps(t)} />), more]
+            : completed.length > 0 && (
+                <CompletedSection
+                  count={completed.length}
+                  expanded={showCompleted}
+                  onToggle={() =>
+                    updatePrefs((p) => ({ ...p, showCompleted: { ...p.showCompleted, [key]: !showCompleted } }))
+                  }
+                >
+                  {completed.slice(0, completedShown).map((t) => (
+                    <TaskRow key={t.id} {...rowProps(t)} />
+                  ))}
+                  {more}
+                </CompletedSection>
+              )}
 
         {open.length === 0 && completed.length === 0 && everSynced === false && (
           <div className={styles.empty}>
@@ -332,6 +360,29 @@ export function TaskListView({ view }: Props) {
         }}
       />
     </section>
+  )
+}
+
+/** "Show more" after the last rendered row; it also loads the next batch when scrolled near. */
+function ShowMore({ left, onMore, root }: { left: number; onMore: () => void; root: RefObject<HTMLElement | null> }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  // Observing again after each batch catches a button that's still in range (a tall window).
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) onMore()
+      },
+      { root: root.current, rootMargin: '600px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [left, onMore, root])
+  return (
+    <Button ref={ref} appearance="subtle" style={{ margin: `${tokens.spacingVerticalS} auto`, display: 'flex' }} onClick={onMore}>
+      Show more ({left.toLocaleString()} left)
+    </Button>
   )
 }
 

@@ -31,6 +31,8 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
 ### Data flow
 
 1. The UI reads **only from IndexedDB** through live queries (`dexie-react-hooks`), so it works offline and updates instantly.
+   - Long lists (search results, Completed, All, big lists) render **50 rows at a time**. More rows load as you scroll near the end, or with *Show more*. Counts always cover everything.
+   - **Search** runs once typing pauses (250 ms) or on Enter. It's a substring match over title, notes, steps and categories, so indexes can't help. Instead, each task's text is normalized once and cached per record, which makes a scan of thousands of tasks take milliseconds.
 2. User actions go through `TodoRepository`. It applies the change locally and appends an op to the **outbox**, in one transaction.
 3. `SyncEngine` pushes the outbox **in order**:
    - New entities have `tmp_` ids. On creation the id is remapped everywhere (rows, queued ops, the URL via `alias:` meta).

@@ -9,7 +9,6 @@ import {
   MenuPopover,
   MenuTrigger,
   OverlayDrawer,
-  SearchBox,
   Spinner,
   Text,
   Toast,
@@ -28,7 +27,7 @@ import { ErrorCircleRegular } from '@fluentui/react-icons/svg/error-circle'
 import { NavigationRegular } from '@fluentui/react-icons/svg/navigation'
 import { SettingsRegular } from '@fluentui/react-icons/svg/settings'
 import { SignOutRegular } from '@fluentui/react-icons/svg/sign-out'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useServices, useSignOut } from '../../app/AppServices'
 import { useMediaQuery } from '../../app/theme'
@@ -43,6 +42,7 @@ import { TaskListView } from '../taskList/TaskListView'
 import { useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
 import { isNative } from '../../platform/native'
 import { ReminderHealthBanner } from './ReminderHealthBanner'
+import { SearchField } from './SearchField'
 
 const useStyles = makeStyles({
   root: {
@@ -208,12 +208,16 @@ export function AppShell() {
   )
 }
 
+// Views are passed as stable objects: a new one would make the list filter all tasks again, e.g.
+// whenever a task is opened (`?task=`).
+const SMART_VIEWS = (['important', 'planned', 'all', 'completed'] as SmartListId[]).map((id) => ({ kind: 'smart', id }) as const)
+
 function ViewRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
-      {(['important', 'planned', 'all', 'completed'] as SmartListId[]).map((id) => (
-        <Route key={id} path={`/${id}`} element={<TaskListView view={{ kind: 'smart', id }} />} />
+      {SMART_VIEWS.map((view) => (
+        <Route key={view.id} path={`/${view.id}`} element={<TaskListView view={view} />} />
       ))}
       <Route path="/lists/:listId" element={<ListRoute />} />
       <Route path="/search" element={<SearchRoute />} />
@@ -244,40 +248,15 @@ function ListRoute() {
       if (real) navigate(`/lists/${encodeURIComponent(real)}${window.location.search}`, { replace: true })
     })
   }, [db, lists, listId, navigate])
-  return <TaskListView view={{ kind: 'list', listId }} />
+  const view = useMemo(() => ({ kind: 'list', listId }) as const, [listId])
+  return <TaskListView view={view} />
 }
 
 function SearchRoute() {
   const [params] = useSearchParams()
-  return <TaskListView view={{ kind: 'search', query: params.get('q') ?? '' }} />
-}
-
-function SearchField({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | null> }) {
-  const navigate = useNavigate()
-  const [params] = useSearchParams()
-  const [value, setValue] = useState(params.get('q') ?? '')
-  const lastPath = useRef<string>('/')
-
-  return (
-    <SearchBox
-      ref={inputRef}
-      size="small"
-      appearance="filled-lighter"
-      placeholder="Search"
-      aria-label="Search tasks"
-      value={value}
-      style={{ width: '100%', maxWidth: 'none', minWidth: 0 }}
-      onChange={(_, d) => {
-        setValue(d.value)
-        if (d.value.trim()) {
-          if (!window.location.pathname.startsWith('/search')) lastPath.current = window.location.pathname
-          navigate(`/search?q=${encodeURIComponent(d.value)}`, { replace: window.location.pathname.startsWith('/search') })
-        } else {
-          navigate(lastPath.current)
-        }
-      }}
-    />
-  )
+  const query = params.get('q') ?? ''
+  const view = useMemo(() => ({ kind: 'search', query }) as const, [query])
+  return <TaskListView view={view} />
 }
 
 function SyncIndicator() {
