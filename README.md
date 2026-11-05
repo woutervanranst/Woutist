@@ -46,7 +46,7 @@ API (optional, for push): copy `api/local.settings.example.json` to `api/local.s
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-Demo mode (no sign-in, in-memory fake Graph, dev server only): http://localhost:5173/?demo. Leave it with `?nodemo`.
+Demo mode (no sign-in, in-memory fake Graph, dev server only): http://localhost:5173/?demo. Leave it with `?nodemo`. Add `&many=8000` for a long history (8,000 completed and 400 open tasks) to try performance.
 
 ## Docs
 
