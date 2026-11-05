@@ -90,6 +90,12 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
         saveBase()
     }
 
+    /** Forget an operation Graph refused: it never happened, so the base stays as it is. */
+    fun dropPending(opId: String) = mutate {
+        ops = ops.filterNot { it.id == opId }
+        savePending()
+    }
+
     fun pending(): List<PendingOp> = synchronized(lock) { ops }
 
     /** Sign-out: forget everything about the account. */

@@ -21,6 +21,7 @@ import com.wouteronarchitecture.woutist.data.PendingOp
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.data.TaskGraph
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 enum class OpOutcome { Success, Dropped, Retry }
@@ -32,7 +33,7 @@ class TaskOpWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         AuthManager.init(applicationContext)
         val store = SnapshotStore.get(applicationContext)
         val graph = GraphApi({ AuthManager.tokenSilent(GRAPH_SCOPES) })
-        val outcome = execute(store, graph, opId) { NativeEvents.changed() }
+        val outcome = execute(store, graph, opId, runAttemptCount) { NativeEvents.changed() }
         Log.i("Woutist", "Pending operation $opId: $outcome (attempt ${runAttemptCount + 1})")
         // A recurring task comes back with its next date; Graph has the details.
         if (outcome == OpOutcome.Success) RefreshWorker.refreshSoon(applicationContext)
@@ -46,8 +47,14 @@ class TaskOpWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val KEY_OP = "opId"
         private const val TAG = "woutist-op"
 
-        /** Run [opId] against [graph]; [signal] tells a running app to sync. */
-        suspend fun execute(store: SnapshotStore, graph: TaskGraph, opId: String, signal: () -> Unit): OpOutcome {
+        /** Unexpected errors are retried this many times (about two hours with backoff), then given up. */
+        const val MAX_ATTEMPTS = 8
+
+        /**
+         * Run [opId] against [graph]; [signal] tells a running app to sync. Only a confirmed or "gone"
+         * operation changes the stored tasks. A refused one is forgotten, so the task shows again.
+         */
+        suspend fun execute(store: SnapshotStore, graph: TaskGraph, opId: String, attempt: Int = 0, signal: () -> Unit): OpOutcome {
             val op = store.pending().find { it.id == opId } ?: return OpOutcome.Success
             return try {
                 when (op) {
@@ -73,15 +80,30 @@ class TaskOpWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         store.removePending(op.id)
                         OpOutcome.Dropped
                     }
+                    e.status == 401 -> {
+                        store.needsSignIn = true
+                        OpOutcome.Retry
+                    }
                     e.status == 408 || e.status == 429 || e.status >= 500 -> OpOutcome.Retry
                     else -> {
                         Log.w("Woutist", "Dropping pending ${op.javaClass.simpleName}: Graph ${e.status}")
-                        store.removePending(op.id)
+                        store.dropPending(op.id)
                         OpOutcome.Dropped
                     }
                 }
             } catch (e: IOException) {
                 OpOutcome.Retry
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // MSAL client/service errors, broker hiccups, unexpected responses.
+                if (attempt < MAX_ATTEMPTS) {
+                    OpOutcome.Retry
+                } else {
+                    Log.w("Woutist", "Giving up on pending ${op.javaClass.simpleName} after ${attempt + 1} attempts", e)
+                    store.dropPending(op.id)
+                    OpOutcome.Dropped
+                }
             }
         }
 

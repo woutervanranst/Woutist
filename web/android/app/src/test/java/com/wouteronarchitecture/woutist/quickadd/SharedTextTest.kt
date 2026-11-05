@@ -24,10 +24,16 @@ class SharedTextTest {
         assertEquals("" to null, SharedText.parse(null, null))
     }
 
+    /** Longer text keeps everything in the notes (spec: "a link or any longer text goes into the notes"). */
     @Test fun longTitleTrimmedTo255() {
         val long = "x".repeat(400)
         val (title, notes) = SharedText.parse(null, long)
         assertEquals(255, title.length)
-        assertEquals(null, notes)
+        assertEquals(long, notes)
+    }
+
+    @Test fun linkInTextGoesToNotes() {
+        val text = "Read this https://example.com/a"
+        assertEquals(text to text, SharedText.parse(null, text))
     }
 }

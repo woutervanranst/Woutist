@@ -11,6 +11,7 @@ import com.wouteronarchitecture.woutist.data.task
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -74,10 +75,37 @@ class TaskOpWorkerTest {
         }
     }
 
+    /** Graph refused it: the completion didn't happen, so the task shows again. */
     @Test fun dropsOpOnOtherClientErrors() = runBlocking {
         val store = storeWithCompleteOp()
         assertEquals(OpOutcome.Dropped, TaskOpWorker.execute(store, FakeGraph(GraphHttpException(400, "bad")), "op1") {})
         assertEquals(emptyList<PendingOp>(), store.pending())
+        assertEquals(listOf("A", "B"), store.current()!!.tasks.map { it.id })
+    }
+
+    @Test fun treats401LikeSignInRequired() = runBlocking {
+        val store = storeWithCompleteOp()
+        assertEquals(OpOutcome.Retry, TaskOpWorker.execute(store, FakeGraph(GraphHttpException(401, "expired")), "op1") {})
+        assertEquals(listOf("op1"), store.pending().map { it.id })
+        assertTrue(store.needsSignIn)
+    }
+
+    /** MSAL client/service errors, broker hiccups, bad JSON: retry a while, then give up visibly. */
+    @Test fun retriesUnexpectedErrorsThenDrops() = runBlocking {
+        val store = storeWithCompleteOp()
+        assertEquals(OpOutcome.Retry, TaskOpWorker.execute(store, FakeGraph(IllegalStateException("broker")), "op1", attempt = 0) {})
+        assertEquals(listOf("op1"), store.pending().map { it.id })
+        assertEquals(OpOutcome.Dropped, TaskOpWorker.execute(store, FakeGraph(IllegalStateException("broker")), "op1", attempt = TaskOpWorker.MAX_ATTEMPTS) {})
+        assertEquals(emptyList<PendingOp>(), store.pending())
+        assertEquals(listOf("A", "B"), store.current()!!.tasks.map { it.id })
+    }
+
+    @Test fun cancellationIsNotSwallowed() {
+        val store = storeWithCompleteOp()
+        assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+            runBlocking { TaskOpWorker.execute(store, FakeGraph(kotlinx.coroutines.CancellationException("stopped")), "op1") {} }
+        }
+        assertEquals(listOf("op1"), store.pending().map { it.id })
     }
 
     @Test fun createdTaskReplacesTempTask() = runBlocking {

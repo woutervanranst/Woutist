@@ -39,8 +39,12 @@ class WoutistNativePlugin : Plugin() {
         Notifications.ensureChannel(context)
         NativeEvents.onChanged = { notifyListeners("changed", JSObject()) }
         launchUrl = urlFrom(activity.intent)
-        // Alarms don't survive a force-stop; re-arm from what the phone last knew.
-        Thread { ReminderScheduler.reschedule(context, store, force = true) }.start()
+        Thread {
+            // Alarms don't survive a force-stop; re-arm from what the phone last knew.
+            ReminderScheduler.reschedule(context, store, force = true)
+            // Operations whose work was lost or failed run again (KEEP leaves queued ones alone).
+            store.pending().forEach { TaskOpWorker.enqueue(context, it.id) }
+        }.start()
     }
 
     override fun handleOnNewIntent(intent: Intent) {
@@ -62,7 +66,8 @@ class WoutistNativePlugin : Plugin() {
         val wasWaitingForSignIn = store.needsSignIn
         store.replaceBase(snapshot)
         // Work that stopped on "sign in required" can go now, without waiting out its backoff.
-        if (wasWaitingForSignIn) store.pending().forEach { TaskOpWorker.enqueue(context, it.id, ExistingWorkPolicy.REPLACE) }
+        val policy = if (wasWaitingForSignIn) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
+        store.pending().forEach { TaskOpWorker.enqueue(context, it.id, policy) }
         RefreshWorker.schedule(context)
         call.resolve()
     }
@@ -132,7 +137,7 @@ class WoutistNativePlugin : Plugin() {
     }
 
     private fun urlFrom(intent: Intent?): String? =
-        intent?.getStringExtra(Notifications.EXTRA_URL)?.also { intent.removeExtra(Notifications.EXTRA_URL) }
+        LaunchUrl.sanitize(intent?.getStringExtra(Notifications.EXTRA_URL)?.also { intent.removeExtra(Notifications.EXTRA_URL) })
 
     companion object {
         const val NOTIFICATIONS = "notifications"

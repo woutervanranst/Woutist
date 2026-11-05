@@ -41,6 +41,15 @@ class SnapshotStoreTest {
         assertEquals("2026-11-06", s.current()!!.tasks.single { it.id == "R" }.dueDate)
     }
 
+    @Test fun dropPendingKeepsTheBase() {
+        val s = store()
+        s.replaceBase(snapshot(task("A"), task("B")))
+        s.addPending(PendingOp.Complete("op1", "L1", "A"))
+        s.dropPending("op1")
+        assertEquals(listOf("A", "B"), ids(s))
+        assertEquals(emptyList<PendingOp>(), s.pending())
+    }
+
     @Test fun replaceBaseKeepsPendingOverlay() {
         val s = store()
         s.replaceBase(snapshot(task("A")))
