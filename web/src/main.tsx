@@ -10,9 +10,10 @@ async function bootstrap() {
     const { createDemoAuth } = await import('./dev/demo')
     // The fake Graph is re-seeded on every load, so the local cache must start empty too.
     const { deleteAccountDb } = await import('./services/db')
-    await deleteAccountDb('demo')
+    const adapter = createDemoAuth()
+    await deleteAccountDb(adapter.account!.key)
     auth = (
-      <StaticAuthProvider adapter={createDemoAuth()}>
+      <StaticAuthProvider adapter={adapter}>
         <App />
       </StaticAuthProvider>
     )
