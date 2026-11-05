@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { newLocalTask, type Task, type TodoList } from '../models/todo'
-import { buildSnapshot, remindersFromSnapshot, type NativeSnapshot } from './snapshot'
+import { buildSnapshot, remindersFromSnapshot, widgetTasks, type NativeSnapshot, type WidgetSource } from './snapshot'
 import fixtureInput from './__fixtures__/snapshot-input.json'
 import expected from './__fixtures__/reminders-expected.json'
+import widgetExpected from './__fixtures__/widget-expected.json'
 
 const list = (id: string, displayName: string, sortIndex: number): TodoList => ({
   id,
@@ -57,5 +58,16 @@ describe('buildSnapshot outbox', () => {
 describe('remindersFromSnapshot', () => {
   it('remindersMatchFixture', () => {
     expect(remindersFromSnapshot(fixtureInput as NativeSnapshot, now)).toEqual(expected)
+  })
+})
+
+describe('widgetTasks', () => {
+  const source = (key: string): WidgetSource =>
+    key.startsWith('list:') ? { kind: 'list', listId: key.slice(5) } : { kind: 'smart', id: key.slice(6) as 'important' | 'planned' }
+
+  it('widgetTasksMatchFixture', () => {
+    for (const [key, ids] of Object.entries(widgetExpected)) {
+      expect(widgetTasks(fixtureInput as NativeSnapshot, source(key)).map((t) => t.id), key).toEqual(ids)
+    }
   })
 })

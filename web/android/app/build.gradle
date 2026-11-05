@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
+// Jetpack Glance (the home-screen widget) is written with Compose.
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 android {
     namespace = "com.wouteronarchitecture.woutist"
@@ -32,6 +34,9 @@ android {
                 keyPassword System.getenv('WOUTIST_KEY_PASSWORD')
             }
         }
+    }
+    buildFeatures {
+        compose = true
     }
     testOptions {
         // Local unit tests run on the JVM: android.util.Log and friends return defaults instead of throwing.
@@ -75,6 +80,7 @@ dependencies {
     implementation "com.microsoft.identity.client:msal:8.6.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"
     implementation "androidx.work:work-runtime-ktx:2.12.0"
+    implementation "androidx.glance:glance-appwidget:1.2.0"
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
     testImplementation "junit:junit:$junitVersion"
     // Android's org.json is a stub in local unit tests; use the real one there.

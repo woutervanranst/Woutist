@@ -2,6 +2,10 @@ package com.wouteronarchitecture.woutist.data
 
 import android.content.Context
 import com.wouteronarchitecture.woutist.reminders.ReminderScheduler
+import com.wouteronarchitecture.woutist.widget.TaskListWidget
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -13,6 +17,10 @@ import java.io.File
  */
 class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore) -> Unit = {}) {
     private val lock = Any()
+    private val changes = MutableStateFlow(0L)
+
+    /** Bumped on every change, so an open widget recomposes. */
+    val version: StateFlow<Long> = changes.asStateFlow()
     private var base: Snapshot? = read(BASE)?.let { runCatching { Snapshot.parse(it) }.getOrNull() }
     private var ops: List<PendingOp> = read(PENDING)?.let { json ->
         runCatching { JSONArray(json).let { a -> (0 until a.length()).map { PendingOp.fromJson(a.getJSONObject(it)) } } }.getOrNull()
@@ -93,7 +101,10 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
     }
 
     private inline fun mutate(block: () -> Unit) {
-        synchronized(lock) { block() }
+        synchronized(lock) {
+            block()
+            changes.value += 1
+        }
         onChanged(this)
     }
 
@@ -128,7 +139,10 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
         fun get(context: Context): SnapshotStore = instance ?: synchronized(this) {
             instance ?: run {
                 val app = context.applicationContext
-                SnapshotStore(File(app.filesDir, "native")) { store -> ReminderScheduler.reschedule(app, store) }
+                SnapshotStore(File(app.filesDir, "native")) { store ->
+                    ReminderScheduler.reschedule(app, store)
+                    TaskListWidget.refreshAll(app)
+                }
             }.also { instance = it }
         }
     }

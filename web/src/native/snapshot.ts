@@ -1,6 +1,7 @@
 import type { Prefs } from '../app/prefs'
 import { isTempId, type Task, type TodoList, type WellknownListName } from '../models/todo'
-import type { SortPref } from '../models/views'
+import { instantToLocalDate } from '../models/time'
+import { sortTasks, type SortPref } from '../models/views'
 import { upcomingReminders } from '../services/push/reminders'
 
 /**
@@ -82,4 +83,39 @@ export function remindersFromSnapshot(s: NativeSnapshot, now: Date): NativeRemin
       .map((t) => ({ taskId: t.id, listId: t.listId, fireAt: new Date(t.reminderAt!).toISOString() })),
     now,
   )
+}
+
+/** What a home-screen widget shows (same shape as `WidgetSource` in `widget/WidgetContent.kt`). */
+export type WidgetSource = { kind: 'list'; listId: string } | { kind: 'smart'; id: 'important' | 'planned' }
+
+const DEFAULT_SORT: SortPref = { key: 'default', dir: 'asc' }
+
+/**
+ * The widget's tasks, in the app's order: a list with its sort preference (an unknown list falls
+ * back to Tasks), Important with its sort preference, Planned by date then newest first.
+ * The Android widget implements the same rules; both are checked against `widget-expected.json`.
+ */
+export function widgetTasks(s: NativeSnapshot, source: WidgetSource): NativeSnapshotTask[] {
+  const sorted = (tasks: NativeSnapshotTask[], key: string) =>
+    sortTasks(
+      tasks.map((task) => ({
+        task,
+        createdDateTime: task.createdDateTime,
+        title: task.title,
+        dueDate: task.dueDate,
+        importance: task.important ? ('high' as const) : ('normal' as const),
+      })),
+      s.sort[key] ?? DEFAULT_SORT,
+    ).map((w) => w.task)
+  if (source.kind === 'list') {
+    const known = s.lists.some((l) => l.id === source.listId)
+    const listId = known ? source.listId : s.lists.find((l) => l.wellknownListName === 'defaultList')?.id
+    return sorted(s.tasks.filter((t) => t.listId === listId), `list:${listId}`)
+  }
+  if (source.id === 'important') return sorted(s.tasks.filter((t) => t.important), 'smart:important')
+  const plannedDate = (t: NativeSnapshotTask) =>
+    t.dueDate ?? (t.reminderAt ? instantToLocalDate(new Date(t.reminderAt), s.timeZone) : null)
+  return s.tasks
+    .filter((t) => plannedDate(t) !== null)
+    .sort((a, b) => plannedDate(a)!.localeCompare(plannedDate(b)!) || b.createdDateTime.localeCompare(a.createdDateTime))
 }

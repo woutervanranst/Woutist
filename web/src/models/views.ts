@@ -118,10 +118,13 @@ export function groupPlanned(
 
 const IMPORTANCE_RANK = { high: 0, normal: 1, low: 2 } as const
 
-export function sortTasks(tasks: Task[], pref: SortPref): Task[] {
+/** The fields sorting reads; the Android widget sorts its snapshot tasks with the same rules. */
+export type SortableTask = Pick<Task, 'createdDateTime' | 'title' | 'importance' | 'dueDate'>
+
+export function sortTasks<T extends SortableTask>(tasks: T[], pref: SortPref): T[] {
   const dir = pref.dir === 'asc' ? 1 : -1
-  const byCreatedDesc = (a: Task, b: Task) => b.createdDateTime.localeCompare(a.createdDateTime)
-  const cmp: Record<SortKey, (a: Task, b: Task) => number> = {
+  const byCreatedDesc = (a: T, b: T) => b.createdDateTime.localeCompare(a.createdDateTime)
+  const cmp: Record<SortKey, (a: T, b: T) => number> = {
     // Newest first, like Microsoft To Do's default "add to top".
     default: byCreatedDesc,
     createdDateTime: (a, b) => dir * a.createdDateTime.localeCompare(b.createdDateTime),
