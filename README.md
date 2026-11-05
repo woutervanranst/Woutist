@@ -4,7 +4,8 @@ A Microsoft To Do client for the web (installable PWA) and Android, built direct
 
 Live at **https://woutist.wouteronarchitecture.com**.
 
-- **Backward compatible with Microsoft To Do.** Graph is the only source of truth, and Woutist writes only native To Do fields. Stop using Woutist and the official app has everything.
+- **Backward compatible with Microsoft To Do.** Graph is the only source of truth, and Woutist writes only native To Do fields on tasks. Stop using Woutist and the official app has everything.
+- **One control for date and reminder**, with quick dates and reminder hours you set up once in Settings. They follow you to every device.
 - **Offline-first.** Data is cached in IndexedDB and changes queue in an outbox while offline.
 - **Push reminders** come from a small Azure Functions scheduler that never touches Graph.
 

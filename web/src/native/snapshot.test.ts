@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_DATE_SETTINGS, normalizeDateSettings, quickDateOptions } from '../models/quickDates'
 import { newLocalTask, type Task, type TodoList } from '../models/todo'
 import { buildSnapshot, remindersFromSnapshot, widgetTasks, type NativeSnapshot, type WidgetSource } from './snapshot'
 import fixtureInput from './__fixtures__/snapshot-input.json'
 import expected from './__fixtures__/reminders-expected.json'
 import widgetExpected from './__fixtures__/widget-expected.json'
+import quickDatesExpected from './__fixtures__/quickdates-expected.json'
 
 const list = (id: string, displayName: string, sortIndex: number): TodoList => ({
   id,
@@ -16,7 +18,7 @@ const list = (id: string, displayName: string, sortIndex: number): TodoList => (
 const task = (id: string, listId: string, extra: Partial<Task> = {}): Task => ({ ...newLocalTask(listId, id), id, ...extra })
 const now = new Date('2026-11-05T08:00:00Z')
 const build = (lists: TodoList[], tasks: Task[]) =>
-  buildSnapshot({ accountKey: 'oid.tid', lists, tasks, sort: {}, now, timeZone: 'Europe/Brussels' })
+  buildSnapshot({ accountKey: 'oid.tid', lists, tasks, sort: {}, dates: DEFAULT_DATE_SETTINGS, now, timeZone: 'Europe/Brussels' })
 
 describe('buildSnapshot', () => {
   it('excludesCompletedAndTempTasks', () => {
@@ -49,7 +51,7 @@ describe('buildSnapshot', () => {
 
 describe('buildSnapshot outbox', () => {
   it('flagsUnsentChanges', () => {
-    const base = { accountKey: 'oid.tid', lists: [], tasks: [], sort: {}, now, timeZone: 'Europe/Brussels' }
+    const base = { accountKey: 'oid.tid', lists: [], tasks: [], sort: {}, dates: DEFAULT_DATE_SETTINGS, now, timeZone: 'Europe/Brussels' }
     expect(buildSnapshot(base).outboxPending).toBe(false)
     expect(buildSnapshot({ ...base, outboxPending: true }).outboxPending).toBe(true)
   })
@@ -57,7 +59,7 @@ describe('buildSnapshot outbox', () => {
 
 describe('remindersFromSnapshot', () => {
   it('remindersMatchFixture', () => {
-    expect(remindersFromSnapshot(fixtureInput as NativeSnapshot, now)).toEqual(expected)
+    expect(remindersFromSnapshot(fixtureInput as unknown as NativeSnapshot, now)).toEqual(expected)
   })
 })
 
@@ -67,7 +69,21 @@ describe('widgetTasks', () => {
 
   it('widgetTasksMatchFixture', () => {
     for (const [key, ids] of Object.entries(widgetExpected)) {
-      expect(widgetTasks(fixtureInput as NativeSnapshot, source(key)).map((t) => t.id), key).toEqual(ids)
+      expect(widgetTasks(fixtureInput as unknown as NativeSnapshot, source(key)).map((t) => t.id), key).toEqual(ids)
     }
+  })
+})
+
+describe('quick dates', () => {
+  // The phone's quick-add dialog computes the same quick dates (quickadd/QuickDates.kt), checked against the same fixture.
+  it('quickDatesMatchFixture', () => {
+    const settings = normalizeDateSettings(fixtureInput.dates)
+    for (const [today, rows] of Object.entries(quickDatesExpected)) {
+      expect(quickDateOptions(settings, today).map((o) => [o.id, o.label, o.short, o.value]), today).toEqual(rows)
+    }
+  })
+
+  it('travelsInTheSnapshot', () => {
+    expect(build([], []).dates).toEqual(DEFAULT_DATE_SETTINGS)
   })
 })

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick date "day_after" (Fluent UI System Icons, MIT). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="20" android:viewportHeight="20">
+    <path android:fillColor="@color/quick_date_day_after"
+        android:pathData="M 17 5.5 A 2.5 2.5 0 0 0 14.5 3 h -9 A 2.5 2.5 0 0 0 3 5.5 v 9 A 2.5 2.5 0 0 0 5.5 17 h 4.1 q -.24 -.48 -.4 -1 H 5.5 A 1.5 1.5 0 0 1 4 14.5 V 7 h 12 v 2.2 q .52 .16 1 .4 z M 5.5 4 h 9 c .83 0 1.5 .67 1.5 1.5 V 6 H 4 v -.5 C 4 4.67 4.67 4 5.5 4 M 19 14.5 a 4.5 4.5 0 1 1 -9 0 a 4.5 4.5 0 0 1 9 0 m -2.15 .35 a .5 .5 0 0 0 .15 -.35 a .5 .5 0 0 0 -.15 -.35 l -2 -2 a .5 .5 0 0 0 -.7 .7 L 15.29 14 H 12.5 a .5 .5 0 0 0 0 1 h 2.8 l -1.15 1.15 a .5 .5 0 0 0 .7 .7 z" />
+</vector>

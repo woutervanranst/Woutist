@@ -2,7 +2,9 @@
 
 ## Principle: backward compatible with Microsoft To Do
 
-Microsoft Graph is the **only source of truth**. Woutist writes only native To Do fields: title, status, importance, due date, reminder (`isReminderOn` + `reminderDateTime`), recurrence, steps (`checklistItems`), notes (`body`), categories and attachments. Updates are **field-level PATCHes**, so properties Woutist doesn't model are never touched. Stop using Woutist and the official app has everything, including its own reminders.
+Microsoft Graph is the **only source of truth**. On tasks, Woutist writes only native To Do fields: title, status, importance, due date, reminder (`isReminderOn` + `reminderDateTime`), recurrence, steps (`checklistItems`), notes (`body`), categories and attachments. Updates are **field-level PATCHes**, so properties Woutist doesn't model are never touched. Stop using Woutist and the official app has everything, including its own reminders.
+
+The one thing Woutist adds is its own settings that follow you to every device (quick dates and reminder times). They're an open extension on the default list, which the official app ignores (see [Settings that follow you](#settings-that-follow-you)).
 
 Everything Woutist keeps for itself is disposable:
 
@@ -11,6 +13,7 @@ Everything Woutist keeps for itself is disposable:
 | Lists, tasks, steps, attachments, reminders | Microsoft Graph | Permanent; the official app sees it |
 | Offline cache + outbox of pending changes | IndexedDB (Dexie), one DB per account: `woutist-<homeAccountId>` | Deleted on sign-out |
 | UI preferences (theme, sort, visible smart lists) | `localStorage`, per account | Deleted on sign-out |
+| Quick dates, reminder times, reminder rule | `localStorage`, plus an open extension on the default list in Graph | The local copy is deleted on sign-out; the extension stays with the account |
 | Push subscriptions, reminder schedule, timer cursor | Azure Table Storage (Function App's storage account) | Derived from Graph; removable from Settings |
 
 ## Web app (`web/`)
@@ -40,6 +43,24 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
    - A full refresh runs on first sync and every 6 hours.
    - **Server data never overwrites an entity with unsynced local changes.**
 5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change.
+
+### Dates and reminders
+
+Due date and reminder are **one control**: a date, and optionally a reminder hour on that date. Picking a date applies it at once and keeps the picker open on a row of hour chips; picking an hour (or None) closes it, and a toast says what changed, with Undo. Graph still stores the reminder as its own instant, so:
+
+- Moving the date keeps the reminder's hour, on the new date. Removing the date removes the reminder (and the repeat, like the official app).
+- Picking an hour for a task without a date dates it today.
+- A reminder on another day than the due date (set elsewhere) is shown with its date, and is moved onto the due date only when you pick a new date or hour.
+
+The picker opens from a task's date chip, its right-click menu (a row of quick-date icons, then hours) and the details pane. On phones it's a bottom sheet. Quick dates, reminder times and whether a date preselects the first reminder time come from Settings.
+
+### Settings that follow you
+
+Quick dates, reminder times and the reminder rule are saved in the Microsoft account (`services/settingsSync.ts`) as an **open extension on the default To Do list** (`com.wouteronarchitecture.woutist.settings`). That needs no permission beyond `Tasks.ReadWrite`, and the official app ignores it. The extension holds the settings as a JSON string plus the time of the last change.
+
+- A change is kept in `localStorage` with its time and marked unsaved, then saved 1.5 s later.
+- After every sync the extension is read back. The newer side wins (last writer wins, by the time of the change).
+- An unsaved change (offline, or an error) is retried after the next sync.
 
 ### Dates and time zones
 
@@ -74,15 +95,15 @@ The same React app runs in a Capacitor 8 shell. Two builds install side by side:
 - **Sign-in** is MSAL Android in single-account mode, through Microsoft Authenticator when installed (`WoutistAuth` plugin behind the `AuthAdapter` seam). Graph tokens are silent, with one shared interactive prompt when MSAL needs it.
 - **No Web Push.** Reminders are scheduled on the phone instead.
 
-**Snapshot bridge.** After local changes (debounced 1 s) the app pushes a compact snapshot to native code (`WoutistNative.setSnapshot`): lists, open tasks with server ids (title, star, due date, reminder instant, recurring), sort preferences, and whether the outbox still holds unsent changes. Native code keeps it in files (`SnapshotStore`) plus its own **pending operations** (complete, create) made from notifications, the widget or quick add. Its view is the snapshot with those operations applied.
+**Snapshot bridge.** After local changes (debounced 1 s) the app pushes a compact snapshot to native code (`WoutistNative.setSnapshot`): lists, open tasks with server ids (title, star, due date, reminder instant, recurring), sort preferences, quick dates and reminder times, and whether the outbox still holds unsent changes. Native code keeps it in files (`SnapshotStore`) plus its own **pending operations** (complete, create) made from notifications, the widget or quick add. Its view is the snapshot with those operations applied.
 
 **Reminders.** One alarm per upcoming reminder, with the same rules as Web Push (open tasks, reminder on, from now − 60 s to 90 days ahead, at most 1000; JS and Kotlin are checked against one fixture). They're **alarm-clock alarms** (`setAlarmClock`), like the official app: OxygenOS stretched even exact alarms into a window of 75% of the lead time. Without the exact-alarm permission they fall back to inexact alarms. A notification only appears if the task is still open in the latest snapshot. It offers **Complete** (queued to Graph) and **Snooze** (10 minutes, on the phone only, never written to Graph). Alarms are re-armed after a reboot, an app update, a time-zone change, an exact-alarm permission change, and on every app start (a force-stop clears them).
 
 **Native operations** go to Graph through WorkManager (`TaskOpWorker`, network required, exponential backoff). A 404 drops the operation (the task is gone). "Sign-in required" keeps it and flags the account, and it is retried as soon as the app sends a snapshot again.
 
-**Background refresh.** `RefreshWorker` reads lists and open tasks from Graph every 30 minutes (Android may stretch this) and right after a native operation, so reminders set in the official app or on the web get armed while Woutist is closed. It leaves the snapshot alone while the app has unsent changes, or if the app pushed a newer one during the fetch.
+**Background refresh.** `RefreshWorker` reads lists and open tasks from Graph every 30 minutes (Android may stretch this) and right after a native operation, so reminders set in the official app or on the web get armed while Woutist is closed. It keeps the app's sort preferences and quick dates, and leaves the snapshot alone while the app has unsent changes, or if the app pushed a newer one during the fetch.
 
-**Widget and quick add.** A Glance widget shows a list, Important or Planned in the app's sort order (same rules as `widgetTasks`, checked against a shared fixture). Ticking completes a task; tapping opens it. Its "+", the app icon's **Add a task** shortcut and **Share to Woutist** open a small dialog over the home screen. Like the official app, the dialog can set a due date and a reminder (the app's presets: today, tomorrow, next week, later today, or a picked date and time). A task added from Important is starred; one added from Planned starts due today.
+**Widget and quick add.** A Glance widget shows a list, Important or Planned in the app's sort order (same rules as `widgetTasks`, checked against a shared fixture). Ticking completes a task; tapping opens it. Its "+", the app icon's **Add a task** shortcut and **Share to Woutist** open a small dialog over the home screen. Like the app, one control sets the date (your quick dates from Settings, or a picked date) and, optionally, a reminder hour on it (your reminder times, or any other time). Quick dates follow the same rules in Kotlin and TypeScript, checked against one fixture. A task added from Important is starred; one added from Planned starts due today.
 
 **Settings** show whether notifications, exact reminders and unrestricted background activity are allowed, with a button for each. A banner asks to fix them while reminders are pending.
 

@@ -111,6 +111,24 @@ export async function runGraphSpike() {
     // 7. Lists delta.
     const listsDelta = await call('GET', '/me/todo/lists/delta')
     report.listsDelta = { status: listsDelta.status, hasDeltaLink: Boolean(listsDelta.json?.['@odata.deltaLink'] || listsDelta.json?.['@odata.nextLink']) }
+
+    // 8. Open extension on a list (how Woutist saves settings): create, read by name, update, conflict.
+    const extName = 'com.wouteronarchitecture.woutist.spike'
+    const extBody = { '@odata.type': 'microsoft.graph.openTypeExtension', extensionName: extName }
+    const extCreate = await call('POST', `${L}/extensions`, { ...extBody, updatedAt: 'a', settings: '{"x":1}' })
+    const extGet = await call('GET', `${L}/extensions/${encodeURIComponent(extName)}`)
+    const extPatch = await call('PATCH', `${L}/extensions/${encodeURIComponent(extName)}`, { ...extBody, updatedAt: 'b', settings: '{"x":2}' })
+    const extAgain = await call('GET', `${L}/extensions/${encodeURIComponent(extName)}`)
+    const extDuplicate = await call('POST', `${L}/extensions`, { ...extBody, updatedAt: 'c', settings: '{}' })
+    const extMissing = await call('GET', `${L}/extensions/${encodeURIComponent(`${extName}.missing`)}`)
+    report.listExtension = {
+      create: { status: extCreate.status, id: extCreate.json?.id, error: extCreate.json?.error?.code },
+      getByName: { status: extGet.status, settings: extGet.json?.settings, updatedAt: extGet.json?.updatedAt },
+      patch: { status: extPatch.status, error: extPatch.json?.error?.code },
+      afterPatch: { settings: extAgain.json?.settings, updatedAt: extAgain.json?.updatedAt },
+      duplicateCreate: { status: extDuplicate.status, error: extDuplicate.json?.error?.code },
+      missing: extMissing.status,
+    }
   } catch (error) {
     report.error = String(error)
   } finally {

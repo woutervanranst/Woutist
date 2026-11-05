@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
+import { DEFAULT_DATE_SETTINGS, type DateSettings, normalizeDateSettings } from '../models/quickDates'
 import type { SmartListId, SortPref } from '../models/views'
 
 export type ThemePref = 'system' | 'light' | 'dark'
@@ -11,6 +12,15 @@ export interface Prefs {
   sort: Record<string, SortPref>
   /** Whether the completed section is expanded, per view key. */
   showCompleted: Record<string, boolean>
+  /**
+   * Quick dates and reminder times. Unlike the rest, these are also saved in the Microsoft account so
+   * every device offers the same ones (services/settingsSync.ts).
+   */
+  dates: DateSettings
+  /** When `dates` was last changed, on any device (ISO); null while never changed. */
+  datesUpdatedAt: string | null
+  /** `dates` changed on this device and isn't saved to the account yet. */
+  datesDirty: boolean
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -19,6 +29,9 @@ export const DEFAULT_PREFS: Prefs = {
   confirmDelete: true,
   sort: {},
   showCompleted: {},
+  dates: DEFAULT_DATE_SETTINGS,
+  datesUpdatedAt: null,
+  datesDirty: false,
 }
 
 const listeners = new Set<() => void>()
@@ -37,6 +50,7 @@ function read(accountKey: string): Prefs {
         ...DEFAULT_PREFS,
         ...parsed,
         smartLists: { ...DEFAULT_PREFS.smartLists, ...parsed.smartLists },
+        dates: normalizeDateSettings(parsed.dates),
       }
     }
   } catch {
@@ -70,6 +84,13 @@ export function readPrefs(accountKey: string): Prefs {
   return read(accountKey)
 }
 
+/** Change an account's preferences outside React. */
+export function updatePrefs(accountKey: string, fn: (p: Prefs) => Prefs): void {
+  const current = read(accountKey)
+  const next = fn(current)
+  if (next !== current) write(accountKey, next)
+}
+
 /** Called after any account's preferences change. */
 export function subscribePrefs(listener: () => void): () => void {
   listeners.add(listener)
@@ -78,7 +99,7 @@ export function subscribePrefs(listener: () => void): () => void {
   }
 }
 
-/** UI preferences for the signed-in account (kept in localStorage; never synced to Graph). */
+/** Preferences of the signed-in account, kept in localStorage. Only `dates` is also saved to Graph. */
 export function usePrefs(accountKey: string): [Prefs, (update: (p: Prefs) => Prefs) => void] {
   const prefs = useSyncExternalStore(subscribePrefs, () => read(accountKey))
   const update = useCallback(

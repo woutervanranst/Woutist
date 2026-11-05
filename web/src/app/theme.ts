@@ -5,6 +5,7 @@ import {
   type Theme,
 } from '@fluentui/react-components'
 import { useEffect, useState } from 'react'
+import type { QuickDateVisual } from '../models/quickDates'
 import type { ThemePref } from './prefs'
 
 /** Woutist brand ramp around #186DB6 (the Blue Software blue), darkest (10) to lightest (160). */
@@ -27,11 +28,36 @@ const brand: BrandVariants = {
   160: '#dfebf5',
 }
 
-export const lightTheme: Theme = createLightTheme(brand)
+/** Quick-date icon colors, light and dark. */
+const QUICK_DATE_COLORS: Record<QuickDateVisual, [light: string, dark: string]> = {
+  today: ['#107c10', '#54b054'],
+  tomorrow: ['#ca5010', '#e9835e'],
+  dayAfter: ['#038387', '#4bb4b7'],
+  weekend: ['#0f6cbd', '#62abf5'],
+  nextWeek: ['#8764b8', '#b69cdb'],
+  inWeek: ['#c239b3', '#da7ed0'],
+  days: ['#986f0b', '#d9b75e'],
+  weeks: ['#4f6bed', '#93a4f4'],
+  weekday: ['#0b6a0b', '#6bb76b'],
+  none: ['#616161', '#adadad'],
+}
+const quickDateToken = (visual: QuickDateVisual) => `woutistQuickDate-${visual}`
+
+/** CSS color of a quick date's icon. FluentProvider turns every theme key into a CSS variable. */
+export const quickDateColor = (visual: QuickDateVisual) =>
+  `var(--${quickDateToken(visual)}, ${QUICK_DATE_COLORS[visual][0]})`
+
+const quickDateTokens = (dark: boolean) =>
+  Object.fromEntries(
+    (Object.keys(QUICK_DATE_COLORS) as QuickDateVisual[]).map((v) => [quickDateToken(v), QUICK_DATE_COLORS[v][dark ? 1 : 0]]),
+  )
+
+export const lightTheme: Theme = { ...createLightTheme(brand), ...quickDateTokens(false) }
 export const darkTheme: Theme = {
   ...createDarkTheme(brand),
   colorBrandForeground1: brand[120],
   colorBrandForeground2: brand[130],
+  ...quickDateTokens(true),
 }
 
 export function useMediaQuery(query: string): boolean {

@@ -46,7 +46,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         private const val NOW = "refresh-now"
 
         /**
-         * Replace the stored snapshot with Graph's, keeping the app's sort preferences. Skipped without
+         * Replace the stored snapshot with Graph's, keeping the app's preferences (sort, quick dates). Skipped without
          * a snapshot of the signed-in account, while the app has unsent changes, or when the app pushed
          * a newer snapshot during the fetch.
          */
@@ -58,8 +58,8 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val base = store.current() ?: return RefreshOutcome.Skipped
             if (accountKey == null || base.accountKey != accountKey || base.outboxPending) return RefreshOutcome.Skipped
             return try {
-                // Sort preferences live in the app, not in Graph.
-                val fresh = fetch(accountKey, base.sort).copy(sort = base.sort)
+                // Sort preferences and quick dates come from the app, not from the tasks in Graph.
+                val fresh = fetch(accountKey, base.sort).copy(sort = base.sort, dates = base.dates)
                 if (store.replaceBaseIfUnchanged(base.generatedAt, fresh)) RefreshOutcome.Refreshed else RefreshOutcome.Skipped
             } catch (e: SignInRequired) {
                 store.needsSignIn = true
