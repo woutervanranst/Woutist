@@ -9,7 +9,6 @@ import {
   MenuPopover,
   MenuTrigger,
   OverlayDrawer,
-  SearchBox,
   Spinner,
   Text,
   Toast,
@@ -43,6 +42,7 @@ import { TaskListView } from '../taskList/TaskListView'
 import { useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
 import { isNative } from '../../platform/native'
 import { ReminderHealthBanner } from './ReminderHealthBanner'
+import { SearchField } from './SearchField'
 
 const useStyles = makeStyles({
   root: {
@@ -250,34 +250,6 @@ function ListRoute() {
 function SearchRoute() {
   const [params] = useSearchParams()
   return <TaskListView view={{ kind: 'search', query: params.get('q') ?? '' }} />
-}
-
-function SearchField({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | null> }) {
-  const navigate = useNavigate()
-  const [params] = useSearchParams()
-  const [value, setValue] = useState(params.get('q') ?? '')
-  const lastPath = useRef<string>('/')
-
-  return (
-    <SearchBox
-      ref={inputRef}
-      size="small"
-      appearance="filled-lighter"
-      placeholder="Search"
-      aria-label="Search tasks"
-      value={value}
-      style={{ width: '100%', maxWidth: 'none', minWidth: 0 }}
-      onChange={(_, d) => {
-        setValue(d.value)
-        if (d.value.trim()) {
-          if (!window.location.pathname.startsWith('/search')) lastPath.current = window.location.pathname
-          navigate(`/search?q=${encodeURIComponent(d.value)}`, { replace: window.location.pathname.startsWith('/search') })
-        } else {
-          navigate(lastPath.current)
-        }
-      }}
-    />
-  )
 }
 
 function SyncIndicator() {
