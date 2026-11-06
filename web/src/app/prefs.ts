@@ -25,7 +25,7 @@ export interface Prefs {
 
 export const DEFAULT_PREFS: Prefs = {
   theme: 'system',
-  smartLists: { important: true, planned: true, all: true, completed: true },
+  smartLists: { today: true, important: true, planned: true, all: true, completed: true },
   confirmDelete: true,
   sort: {},
   showCompleted: {},

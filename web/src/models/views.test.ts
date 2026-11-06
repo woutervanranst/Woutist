@@ -42,6 +42,29 @@ describe('smart lists', () => {
     expect(tasksForView({ kind: 'list', listId: 'L2' }, tasks).open.map((t) => t.title)).toEqual(['d'])
   })
 
+  it('shows due and overdue open tasks plus tasks completed today in Today', () => {
+    const done = { completed: 1, status: 'completed' } as const
+    const today = '2026-11-05'
+    const day = [
+      task('overdue', { dueDate: '2026-11-04' }),
+      task('due', { dueDate: today }),
+      // A reminder without a due date files the task under the reminder's day, like Planned.
+      task('reminder', { isReminderOn: true, reminderAt: '2026-11-05T20:00:00.000Z' }),
+      task('reminder off', { isReminderOn: false, reminderAt: '2026-11-05T08:00:00.000Z' }),
+      task('tomorrow', { dueDate: '2026-11-06' }),
+      task('undated'),
+      task('done today', { ...done, completedDate: today, dueDate: '2026-11-08' }),
+      task('done yesterday', { ...done, completedDate: '2026-11-04', dueDate: '2026-11-04' }),
+    ]
+    const view = tasksForView({ kind: 'smart', id: 'today' }, day, today)
+    expect(view.open.map((t) => t.title)).toEqual(['overdue', 'due', 'reminder'])
+    expect(view.completed.map((t) => t.title)).toEqual(['done today'])
+    // A day later, yesterday's tasks are overdue and nothing is completed "today".
+    const next = tasksForView({ kind: 'smart', id: 'today' }, day, '2026-11-06')
+    expect(next.open.map((t) => t.title)).toEqual(['overdue', 'due', 'reminder', 'tomorrow'])
+    expect(next.completed).toEqual([])
+  })
+
   it('searches title, notes and steps, ignoring case and accents', () => {
     expect(tasksForView({ kind: 'search', query: 'creme BRULEE' }, tasks).open.map((t) => t.title)).toEqual(['e'])
   })

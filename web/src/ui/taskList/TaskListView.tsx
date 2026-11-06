@@ -44,6 +44,7 @@ import {
   usePendingTaskIds,
   useSelectedTask,
   useSyncStatus,
+  useToday,
 } from '../hooks'
 import { TaskRow } from './TaskRow'
 
@@ -136,15 +137,16 @@ export function TaskListView({ view }: Props) {
   const sortDir = prefs.sort[key]?.dir ?? 'asc'
   const showCompleted = prefs.showCompleted[key] ?? view.kind !== 'list'
 
+  const today = useToday()
   const { open, completed } = useMemo(() => {
-    const result = tasksForView(view, tasks ?? [])
+    const result = tasksForView(view, tasks ?? [], today)
     return {
       open: sortTasks(result.open, { key: sortKey, dir: sortDir }),
       completed: [...result.completed].sort((a, b) =>
         (b.completedDate ?? '').localeCompare(a.completedDate ?? ''),
       ),
     }
-  }, [view, tasks, sortKey, sortDir])
+  }, [view, tasks, sortKey, sortDir, today])
 
   // How many rows to render; back to one batch for another view or search.
   const batchFor = `${key}\n${query}`
@@ -203,7 +205,7 @@ export function TaskListView({ view }: Props) {
     if (!title || !targetListId) return
     const defaults: TaskChanges = {}
     if (view.kind === 'smart' && view.id === 'important') defaults.importance = 'high'
-    if (view.kind === 'smart' && view.id === 'planned') defaults.dueDate = todayLocal()
+    if (view.kind === 'smart' && (view.id === 'planned' || view.id === 'today')) defaults.dueDate = todayLocal()
     setNewTitle('')
     await repo.addTask(targetListId, title, defaults)
   }
@@ -227,12 +229,13 @@ export function TaskListView({ view }: Props) {
     ...handlers,
   })
 
-  const planned = view.kind === 'smart' && view.id === 'planned'
+  // Today is grouped like Planned ("Earlier", "Today").
+  const planned = view.kind === 'smart' && (view.id === 'planned' || view.id === 'today')
   const completedView = view.kind === 'smart' && view.id === 'completed'
 
   // Open tasks first, then completed ones, up to `limit` rows. The completed section appears once
   // every open task is shown; counts always cover everything.
-  const plannedGroups = planned ? groupPlanned(open) : []
+  const plannedGroups = planned ? groupPlanned(open, today) : []
   const openShown = Math.min(open.length, limit)
   const completedExpanded = completedView || showCompleted
   const completedShown = openShown < open.length || !completedExpanded ? 0 : Math.min(completed.length, limit - openShown)
@@ -338,11 +341,13 @@ export function TaskListView({ view }: Props) {
           <div className={styles.empty}>
             {view.kind === 'search'
               ? 'No tasks match your search.'
-              : planned
-                ? 'Tasks with due dates or reminders show up here.'
-                : view.kind === 'smart' && view.id === 'important'
-                  ? 'Star tasks to see them here.'
-                  : 'Nothing here yet. Add a task above.'}
+              : view.kind === 'smart' && view.id === 'today'
+                ? 'Nothing due today.'
+                : planned
+                  ? 'Tasks with due dates or reminders show up here.'
+                  : view.kind === 'smart' && view.id === 'important'
+                    ? 'Star tasks to see them here.'
+                    : 'Nothing here yet. Add a task above.'}
           </div>
         )}
       </div>

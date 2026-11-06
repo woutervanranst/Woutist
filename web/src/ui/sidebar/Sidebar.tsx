@@ -23,7 +23,7 @@ import type { TodoList } from '../../models/todo'
 import { SMART_LISTS, tasksForView } from '../../models/views'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { ListIcon, SmartListIcon, listLabel } from '../common/ListIcon'
-import { useAccountPrefs, useAllTasks, useLists } from '../hooks'
+import { useAccountPrefs, useAllTasks, useLists, useToday } from '../hooks'
 
 const useStyles = makeStyles({
   root: {
@@ -82,6 +82,7 @@ export function Sidebar({ onNavigate }: Props) {
   const lists = useLists() ?? []
   const allTasks = useAllTasks()
   const [prefs] = useAccountPrefs()
+  const today = useToday()
   const [newListName, setNewListName] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [deleting, setDeleting] = useState<TodoList | null>(null)
@@ -92,12 +93,13 @@ export function Sidebar({ onNavigate }: Props) {
     for (const t of tasks) if (!t.completed) perList.set(t.listId, (perList.get(t.listId) ?? 0) + 1)
     return {
       perList,
+      today: tasksForView({ kind: 'smart', id: 'today' }, tasks, today).open.length,
       important: tasksForView({ kind: 'smart', id: 'important' }, tasks).open.length,
       planned: tasksForView({ kind: 'smart', id: 'planned' }, tasks).open.length,
       all: tasksForView({ kind: 'smart', id: 'all' }, tasks).open.length,
       completed: 0,
     }
-  }, [allTasks])
+  }, [allTasks, today])
 
   const linkClass = ({ isActive }: { isActive: boolean }) => mergeClasses(styles.item, isActive && styles.active)
 
