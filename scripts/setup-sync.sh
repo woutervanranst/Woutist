@@ -19,6 +19,9 @@ GOOGLE_SERVICES="${2:-}"
 
 az extension add --name webpubsub --upgrade -o none 2>/dev/null || true
 
+echo "==> Resource provider Microsoft.SignalRService (Web PubSub)"
+az provider register --namespace Microsoft.SignalRService --wait -o none
+
 echo "==> Web PubSub $PUBSUB (Free_F1)"
 if ! az webpubsub show -n "$PUBSUB" -g "$RG" >/dev/null 2>&1; then
   az webpubsub create -n "$PUBSUB" -g "$RG" -l "$LOCATION" --sku Free_F1 -o none
