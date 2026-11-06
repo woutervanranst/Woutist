@@ -1,6 +1,6 @@
 # Microsoft Graph To Do API: verified behaviour
 
-Checked against the live API (v1.0) with a personal Microsoft account on 2026-11-04. You can re-run the spike from the dev console after signing in on `localhost:5173`: `await __woutist.spike()`. It creates a temporary list and deletes it afterwards.
+Checked against the live API (v1.0) with a personal Microsoft account on 2026-11-04. You can re-run the spike from the dev console after signing in on `localhost:5173`: `await __woutist.spike()`. It creates a temporary list and deletes it afterwards. The change-notification rows come from `await __woutist.spikeWebhooks(<public url>)`; see `web/src/dev/webhookSpike.ts` for the receiver and tunnel setup.
 
 | Topic | Result | How Woutist uses it |
 |---|---|---|
@@ -23,5 +23,9 @@ Checked against the live API (v1.0) with a personal Microsoft account on 2026-11
 | `GET …/tasks?$select=…` (2026-11-05) | **Any `$select` that includes `title` returns 400 `invalidRequest`**; selects without `title` work | The Android refresh reads full tasks (no `$select`) and maps only what it needs |
 | Optional task fields (`dueDateTime`, `reminderDateTime`, `recurrence`, `completedDateTime`) | Omitted when not set (no key) | Mappers treat a missing key as null |
 | Open extensions on a list (`POST/GET/PATCH /me/todo/lists/{id}/extensions/{name}`) | Works (2026-11-05): create 201, get by name 200 with the custom properties, PATCH 200, missing name 404. **Creating an extension whose name already exists returns 201, not 409.** A settings change synced between the web app and the Android app | Woutist's synced settings (quick dates, reminder times) live on the default list. It reads before it writes and PATCHes when the extension exists, so it never relies on a 409 |
+| Change notifications on tasks (`POST /subscriptions`, resource `/me/todo/lists/{id}/tasks`, `created,updated,deleted`), personal account (2026-11-06) | **Works.** Create 201. More than 4230 minutes ahead returns 400 (`Subscription expiration can only be 4230 minutes in the future.`). `GET /subscriptions` lists it. Renewal with `PATCH` returns 200 | Woutist's own sync trigger: one subscription per list, created and renewed by the devices |
+| Notification latency (2026-11-06) | Changes made through Graph: **0.4–1.5 s** for create, rename, added step, completion and delete. A rename in the official To Do app arrived too, within 37 s of the start of the test (the exact time of the edit wasn't recorded) | Near-instant sync; polling stays as the safety net |
+| Notification payload (2026-11-06) | `resource` is `todob2/graph/v1/users('<email>')/todoApp/lists('<listId>')/tasks`: the list id, **not URL-encoded**, and no task id. `resourceData.id` is the task id. `clientState`, `tenantId` and `subscriptionExpirationDateTime` are included. A step change is reported as `updated` on its task | The Function reads the list id from `lists('…')` and checks `clientState` |
+| Deleting a list that has a subscription (2026-11-06) | The task delete is notified. The subscription **survives**: `GET /subscriptions/{id}` still returns 200, and no lifecycle notification arrives | Devices delete subscriptions for lists that no longer exist |
 
 **Not available in Graph:** My Day, list groups (folders), manual task order, "Assigned to me" (Planner), sharing management.
