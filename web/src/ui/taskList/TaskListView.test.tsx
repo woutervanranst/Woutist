@@ -25,6 +25,7 @@ vi.mock('../hooks', () => {
     useDateSettings: () => [DEFAULT_PREFS.dates, () => {}],
     useSelectedTask: () => [null, () => {}],
     useCompactLayout: () => false,
+    useToday: () => todayLocal(),
     useSyncStatus: () => ({ state: 'idle', lastSyncAt: null, pendingChanges: 0, error: null }),
   }
 })

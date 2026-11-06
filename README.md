@@ -5,6 +5,7 @@ A Microsoft To Do client for the web (installable PWA) and Android, built direct
 Live at **https://woutist.wouteronarchitecture.com**.
 
 - **Backward compatible with Microsoft To Do.** Graph is the only source of truth, and Woutist writes only native To Do fields on tasks. Stop using Woutist and the official app has everything.
+- **Today** gathers what's due or overdue across all lists, plus what you completed today.
 - **One control for date and reminder**, with quick dates and reminder hours you set up once in Settings. They follow you to every device.
 - **Offline-first.** Data is cached in IndexedDB and changes queue in an outbox while offline.
 - **Push reminders** come from a small Azure Functions scheduler that never touches Graph.
@@ -14,7 +15,7 @@ Live at **https://woutist.wouteronarchitecture.com**.
 Download `woutist-<version>.apk` from the [latest Android release](https://github.com/woutervanranst/Woutist/releases) on your phone, install it, and sign in with your Microsoft account. You get:
 
 - reminders scheduled on the phone, with Complete and Snooze
-- a home-screen task list widget
+- a home-screen task list widget (any list, Today, Important or Planned)
 - an "Add a task" shortcut
 - Share to Woutist
 

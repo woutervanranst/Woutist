@@ -5,6 +5,7 @@ import { useServices } from '../app/AppServices'
 import { usePrefs } from '../app/prefs'
 import { useMediaQuery } from '../app/theme'
 import type { DateSettings } from '../models/quickDates'
+import { todayLocal } from '../models/time'
 import type { Task, TodoList } from '../models/todo'
 import { orderLists } from '../models/views'
 import type { AttachmentRecord, CategoryRecord } from '../services/db'
@@ -79,6 +80,21 @@ export function useDateSettings(): [DateSettings, (fn: (s: DateSettings) => Date
     [update],
   )
   return [prefs.dates, set]
+}
+
+function subscribeToday(onChange: () => void): () => void {
+  // Checked every minute and when the app comes back to the foreground (timers sleep in the background).
+  const timer = setInterval(onChange, 60_000)
+  document.addEventListener('visibilitychange', onChange)
+  return () => {
+    clearInterval(timer)
+    document.removeEventListener('visibilitychange', onChange)
+  }
+}
+
+/** The user's date (`YYYY-MM-DD`); re-renders when it changes at midnight. */
+export function useToday(): string {
+  return useSyncExternalStore(subscribeToday, () => todayLocal())
 }
 
 /** Phone-sized layout: the details pane replaces the list and pickers open as bottom sheets. */

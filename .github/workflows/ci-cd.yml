@@ -3,8 +3,9 @@ name: CI/CD
 on:
   push:
     branches: [main]
-    # Android releases: pushing android-v<version> builds the signed APK and attaches it to a GitHub Release.
-    tags: ['android-v*']
+    # Releases: pushing v<version> (e.g. v0.4.0) deploys the web app and API and attaches the signed APK
+    # to a GitHub Release. Nothing deploys from main; main and pull requests only run the checks.
+    tags: ['v[0-9]*']
   pull_request:
   workflow_dispatch:
 
@@ -28,10 +29,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags so git describe can derive the version
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
+      - name: Derive the app version from git
+        # On a release tag this is exactly the version (0.4.0); on other commits it is the latest
+        # v* tag plus commits since and the short sha (0.4.0-5-gabc1234).
+        # Without any tag it stays unset and the build falls back to web/package.json.
+        run: |
+          v=$(git describe --tags --match 'v[0-9]*' --always 2>/dev/null || true)
+          case "$v" in v[0-9]*) echo "APP_VERSION=${v#v}" >> "$GITHUB_ENV" ;; esac
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -72,7 +82,7 @@ jobs:
 
   deploy-web:
     name: Deploy web (Static Web Apps)
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [verify, secrets-scan]
     runs-on: ubuntu-latest
     environment:
@@ -95,7 +105,7 @@ jobs:
 
   deploy-api:
     name: Deploy API (Azure Functions)
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [verify, secrets-scan]
     runs-on: ubuntu-latest
     environment:
@@ -142,7 +152,7 @@ jobs:
 
   android-release:
     name: Android release APK
-    if: startsWith(github.ref, 'refs/tags/android-v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [android-test, secrets-scan]
     runs-on: ubuntu-latest
     environment:
@@ -162,9 +172,11 @@ jobs:
           cache: gradle
       - name: Version from the tag
         id: version
-        run: echo "name=${GITHUB_REF_NAME#android-v}" >> "$GITHUB_OUTPUT"
+        run: echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run build -w @woutist/web
+        env:
+          APP_VERSION: ${{ steps.version.outputs.name }}
       - run: npx cap sync android
         working-directory: web
       - name: Build the signed APK

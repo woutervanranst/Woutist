@@ -17,7 +17,7 @@ sealed class WidgetSource {
     /** A list; an unknown id (deleted elsewhere, or no snapshot yet) shows Tasks. */
     data class List(val listId: String) : WidgetSource()
 
-    /** `important` or `planned`. */
+    /** `today`, `important` or `planned`. */
     data class Smart(val id: String) : WidgetSource()
 
     fun toJson(): String = when (this) {
@@ -41,20 +41,34 @@ sealed class WidgetSource {
 object WidgetContent {
     private val DEFAULT_SORT = SortPref("default", "asc")
 
-    fun tasks(s: Snapshot, source: WidgetSource): List<SnapTask> = when (val resolved = resolve(s, source)) {
+    /** The open tasks. Today is Planned up to [today]: due or overdue. */
+    fun tasks(s: Snapshot, source: WidgetSource, today: LocalDate = todayIn(s)): List<SnapTask> = when (val resolved = resolve(s, source)) {
         is WidgetSource.List -> sorted(s.tasks.filter { it.listId == resolved.listId }, s.sort["list:${resolved.listId}"])
         is WidgetSource.Smart -> when (resolved.id) {
             "important" -> sorted(s.tasks.filter { it.important }, s.sort["smart:important"])
             else -> {
                 val zone = zoneOf(s)
-                s.tasks.filter { plannedDate(it, zone) != null }
+                val until = today.toString()
+                s.tasks.filter { t -> plannedDate(t, zone)?.let { resolved.id != "today" || it <= until } == true }
                     .sortedWith(compareBy<SnapTask> { plannedDate(it, zone) }.then(byCreatedDesc))
             }
         }
     }
 
+    /** The completed rows below the open ones: Today's tasks completed on [today], newest first. */
+    fun doneTasks(s: Snapshot, source: WidgetSource, today: LocalDate = todayIn(s)): List<SnapTask> =
+        if (source is WidgetSource.Smart && source.id == "today") {
+            s.completedToday.filter { it.completedDate == today.toString() }.sortedWith(byCreatedDesc)
+        } else {
+            emptyList()
+        }
+
     fun title(s: Snapshot?, source: WidgetSource): String = when (source) {
-        is WidgetSource.Smart -> if (source.id == "important") "Important" else "Planned"
+        is WidgetSource.Smart -> when (source.id) {
+            "today" -> "Today"
+            "important" -> "Important"
+            else -> "Planned"
+        }
         is WidgetSource.List -> s?.let { snap ->
             val id = (resolve(snap, source) as WidgetSource.List).listId
             snap.lists.firstOrNull { it.id == id }?.name
@@ -128,6 +142,9 @@ object WidgetContent {
 
     private fun plannedDate(t: SnapTask, zone: ZoneId): String? =
         t.dueDate ?: t.reminderAt?.let { Instant.parse(it).atZone(zone).toLocalDate().toString() }
+
+    /** The phone's date in the snapshot's zone. */
+    fun todayIn(s: Snapshot): LocalDate = LocalDate.now(zoneOf(s))
 
     private fun zoneOf(s: Snapshot): ZoneId = runCatching { ZoneId.of(s.timeZone) }.getOrDefault(ZoneId.systemDefault())
 }

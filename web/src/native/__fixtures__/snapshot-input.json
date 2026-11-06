@@ -14,7 +14,13 @@
     { "id": "task-a", "listId": "L2", "title": "Same time, first", "important": false, "dueDate": null, "reminderAt": "2026-11-05T09:00:00.000Z", "createdDateTime": "2026-11-02T11:00:00.000Z", "recurring": true },
     { "id": "task-off", "listId": "L2", "title": "Reminder off", "important": false, "dueDate": "2026-11-06", "reminderAt": null, "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false },
     { "id": "task-90d", "listId": "L1", "title": "Exactly 90 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-03T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false },
-    { "id": "task-91d", "listId": "L1", "title": "91 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-04T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false }
+    { "id": "task-91d", "listId": "L1", "title": "91 days ahead", "important": false, "dueDate": null, "reminderAt": "2027-02-04T08:00:00.000Z", "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false },
+    { "id": "task-overdue", "listId": "L2", "title": "Due yesterday", "important": false, "dueDate": "2026-11-04", "reminderAt": null, "createdDateTime": "2026-10-30T10:00:00.000Z", "recurring": false }
+  ],
+  "completedToday": [
+    { "id": "done-old", "listId": "L1", "title": "Done today, older task", "important": false, "dueDate": "2026-11-05", "reminderAt": null, "createdDateTime": "2026-10-01T10:00:00.000Z", "recurring": false, "completedDate": "2026-11-05" },
+    { "id": "done-yesterday", "listId": "L1", "title": "Done yesterday", "important": false, "dueDate": null, "reminderAt": null, "createdDateTime": "2026-11-04T10:00:00.000Z", "recurring": false, "completedDate": "2026-11-04" },
+    { "id": "done-new", "listId": "L2", "title": "Done today, newer task", "important": true, "dueDate": null, "reminderAt": null, "createdDateTime": "2026-11-03T10:00:00.000Z", "recurring": false, "completedDate": "2026-11-05" }
   ],
   "sort": { "list:L1": { "key": "dueDate", "dir": "asc" } },
   "outboxPending": false,

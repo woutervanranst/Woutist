@@ -10,7 +10,7 @@ android {
         applicationId "com.wouteronarchitecture.woutist"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // CI sets these for releases (run number, and the tag without "android-v").
+        // CI sets these for releases (run number, and the tag without "v").
         versionCode = (System.getenv('WOUTIST_VERSION_CODE') ?: '1').toInteger()
         versionName = System.getenv('WOUTIST_VERSION_NAME') ?: '0.0.0-dev'
         // MSAL redirect: msauth://<applicationId>/<signature hash>. The hash belongs to the signing key.

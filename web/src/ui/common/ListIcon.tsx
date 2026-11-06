@@ -6,10 +6,12 @@ import { HomeRegular } from '@fluentui/react-icons/svg/home'
 import { ListRegular } from '@fluentui/react-icons/svg/list'
 import { SearchRegular } from '@fluentui/react-icons/svg/search'
 import { StarRegular } from '@fluentui/react-icons/svg/star'
+import { WeatherSunnyRegular } from '@fluentui/react-icons/svg/weather-sunny'
 import type { TodoList } from '../../models/todo'
 import { type SmartListId, splitListEmoji } from '../../models/views'
 
 export const SMART_ICONS: Record<SmartListId, typeof StarRegular> = {
+  today: WeatherSunnyRegular,
   important: StarRegular,
   planned: CalendarLtrRegular,
   all: AppsListRegular,

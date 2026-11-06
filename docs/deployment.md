@@ -65,18 +65,19 @@ A new domain is a new browser origin. Sign-in, the offline cache, the installed 
 Run `scripts/setup-github.sh` from the repo root. It:
 - creates the public repo
 - turns on secret scanning and push protection
-- creates the `production` environment, which only `main` can deploy to
+- creates the `production` environment, which only `v*` release tags can deploy to
 - creates the `id-woutist-github` identity with a federated credential for the `production` environment (GitHub's immutable-id subject `repo:woutervanranst@<ownerId>/Woutist@<repoId>:environment:production`) and *Website Contributor* on the Function App only
 - sets environment secrets (SWA deploy token, OIDC ids) and repository variables (the public `VITE_*` values)
 - pushes `main`
 
-From then on, every push to `main` runs `.github/workflows/ci-cd.yml`:
-1. lint, typecheck, test and build
-2. gitleaks
-3. deploy the web app to SWA
-4. deploy the API to Functions
+Pushes to `main` and pull requests run the checks only (lint, typecheck, test, build, gitleaks, Android tests and lint). Fork PRs get no secrets and can't deploy.
 
-Pull requests run the checks only. Fork PRs get no secrets and can't deploy.
+A release is a pushed tag `v<version>` (see [Releasing](#releasing)). It runs the same checks and then:
+1. deploys the web app to SWA
+2. deploys the API to Functions
+3. builds the signed Android APK and attaches it to the GitHub Release
+
+The version shown in Settings is derived from git: exactly `0.4.0` on the tag build, `0.4.0-5-gabc1234` on builds after it.
 
 ### Manual API deploy (without CI)
 
@@ -84,6 +85,22 @@ Pull requests run the checks only. Fork PRs get no secrets and can't deploy.
 npm run build -w @woutist/api
 (cd api/deploy && zip -qr ../deploy.zip .)
 az functionapp deployment source config-zip -g rg-woutist -n func-woutist --src api/deploy.zip
+```
+
+## Releasing
+
+Only tags named `v<version>` release anything. Merging to `main` deploys nothing.
+
+```bash
+git tag v0.4.0 && git push origin v0.4.0
+```
+
+One tag releases everything: the web app (SWA), the API (Functions) and the signed Android APK (GitHub Release `v0.4.0`), all showing version `0.4.0`.
+
+The `production` environment must allow the tag pattern `v*` (Settings → Environments → production → Deployment branches and tags). `scripts/setup-github.sh` sets this up. For an existing repo, replace the old `main` / `android-v*` rules:
+
+```bash
+gh api -X POST repos/<owner>/Woutist/environments/production/deployment-branch-policies -f name='v*' -f type=tag
 ```
 
 ## Android app
@@ -96,13 +113,7 @@ npm run android:run -w @woutist/web   # build the web app, sync Capacitor, insta
 
 Debug builds also accept `adb shell am broadcast -a com.wouteronarchitecture.woutist.DEBUG_REFRESH -p com.wouteronarchitecture.woutist.debug`, which runs a background refresh now.
 
-**Release.** Push a tag and CI does the rest:
-
-```bash
-git tag android-v0.2.0 && git push origin android-v0.2.0
-```
-
-The `android-release` job (environment `production`) builds the web app, signs `assembleRelease` with the `ANDROID_*` secrets and attaches `woutist-0.2.0.apk` to the GitHub Release `android-v0.2.0`. `versionCode` is the workflow run number and `versionName` is the tag without `android-v`. The `production` environment must allow tags `android-v*` (Settings → Environments → production → Deployment branches and tags), next to `main`. `android-test` (unit tests and lint) runs on every push and PR.
+**Release.** See [Releasing](#releasing). The `android-release` job (environment `production`) builds the web app, signs `assembleRelease` with the `ANDROID_*` secrets and attaches `woutist-0.2.0.apk` to the GitHub Release `v0.2.0`. `versionCode` is the workflow run number and `versionName` is the tag without `v`. `android-test` (unit tests and lint) runs on every push and PR.
 
 **Install** the APK from the Release page on the phone (allow installs from the browser), or `adb install woutist-0.2.0.apk`. Updates install over it as long as they're signed with the same key.
 

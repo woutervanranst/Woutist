@@ -16,7 +16,7 @@ import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import kotlinx.coroutines.launch
 
-/** Picks what a widget shows: Tasks, Important, Planned, then the other lists (app order). */
+/** Picks what a widget shows: Tasks, Today, Important, Planned, then the other lists (app order). */
 class WidgetConfigActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +62,7 @@ class WidgetConfigActivity : AppCompatActivity() {
             .map { it.name to WidgetSource.List(it.id) }
         return listOf(
             (default?.name ?: "Tasks") to WidgetSource.List(default?.id.orEmpty()),
+            "Today" to WidgetSource.Smart("today"),
             "Important" to WidgetSource.Smart("important"),
             "Planned" to WidgetSource.Smart("planned"),
         ) + others

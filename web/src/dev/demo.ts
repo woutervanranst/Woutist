@@ -58,6 +58,7 @@ function seed(fake: FakeGraph) {
     recurrence: { pattern: { type: 'weekly', interval: 1, daysOfWeek: ['thursday'] }, range: { type: 'noEnd', startDate: addDays(today, 1) } },
   })
   fake.addTask(tasks, { title: 'Book dentist appointment', status: 'completed', completedDateTime: due(-1) })
+  fake.addTask(tasks, { title: 'Take out the recycling', status: 'completed', dueDateTime: due(0), completedDateTime: due(0) })
   fake.addTask(groceries, {
     title: 'Milk',
     checklistItems: [

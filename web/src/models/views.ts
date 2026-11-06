@@ -1,7 +1,7 @@
 import type { Task, TodoList } from './todo'
 import { addDays, dayOfWeek, todayLocal } from './time'
 
-export type SmartListId = 'important' | 'planned' | 'all' | 'completed'
+export type SmartListId = 'today' | 'important' | 'planned' | 'all' | 'completed'
 
 export type ViewRef =
   | { kind: 'smart'; id: SmartListId }
@@ -16,6 +16,7 @@ export interface SortPref {
 }
 
 export const SMART_LISTS: { id: SmartListId; label: string }[] = [
+  { id: 'today', label: 'Today' },
   { id: 'important', label: 'Important' },
   { id: 'planned', label: 'Planned' },
   { id: 'all', label: 'All' },
@@ -55,8 +56,17 @@ export function isPlanned(task: Task): boolean {
   return task.dueDate !== null || (task.isReminderOn && task.reminderAt !== null)
 }
 
-/** Tasks belonging to a view. "open" are shown on top, "completed" in the collapsible section. */
-export function tasksForView(view: ViewRef, tasks: Task[]): { open: Task[]; completed: Task[] } {
+/** Due or overdue on `today`: filed under today or earlier in Planned (see `plannedDate`). */
+export function isDueBy(task: Task, today: string): boolean {
+  const date = plannedDate(task)
+  return date !== null && date <= today
+}
+
+/**
+ * Tasks belonging to a view. "open" are shown on top, "completed" in the collapsible section.
+ * `today` (the user's date) decides what Today shows.
+ */
+export function tasksForView(view: ViewRef, tasks: Task[], today: string = todayLocal()): { open: Task[]; completed: Task[] } {
   let selected: Task[]
   switch (view.kind) {
     case 'list':
@@ -69,6 +79,11 @@ export function tasksForView(view: ViewRef, tasks: Task[]): { open: Task[]; comp
     }
     case 'smart':
       switch (view.id) {
+        case 'today':
+          return {
+            open: tasks.filter((t) => !t.completed && isDueBy(t, today)),
+            completed: tasks.filter((t) => t.completed && t.completedDate === today),
+          }
         case 'important':
           return { open: tasks.filter((t) => t.important && !t.completed), completed: [] }
         case 'planned':
