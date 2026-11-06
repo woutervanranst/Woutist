@@ -1,7 +1,7 @@
 /**
  * In-memory fake of the Microsoft Graph To Do API for tests (MSW handlers).
- * Implements lists (+ open extensions), tasks (+ delta), checklistItems, attachments, /me and master categories,
- * plus paging, request recording and failure injection.
+ * Implements lists (+ open extensions), tasks (+ delta), checklistItems, attachments, /me, master categories and
+ * change-notification subscriptions, plus paging, request recording and failure injection.
  */
 import type { ChecklistItem, TodoTask, TodoTaskList } from '@microsoft/microsoft-graph-types'
 import { http, HttpResponse, type HttpHandler, type PathParams } from 'msw'
@@ -36,6 +36,15 @@ interface Change {
   taskId: string
 }
 
+export interface FakeSubscription {
+  id: string
+  resource: string
+  changeType: string
+  notificationUrl: string
+  clientState: string | null
+  expirationDateTime: string
+}
+
 export interface RecordedRequest {
   method: string
   url: URL
@@ -67,6 +76,8 @@ export class FakeGraph {
    * Graph's docs say it's read-only ('refused' = 400); 'applied' covers the case where a rename works.
    */
   categoryRename: 'ignored' | 'refused' | 'applied' = 'ignored'
+  /** Change-notification subscriptions of this app for the user (`/subscriptions`). */
+  subscriptions = new Map<string, FakeSubscription>()
   private failures: Failure[] = []
 
   addList(displayName: string, extra: Partial<TodoTaskList> = {}): string {
@@ -205,6 +216,28 @@ export class FakeGraph {
     }
 
     return [
+      // ----- change-notification subscriptions -----
+      // Graph doesn't return clientState when listing, and echoes the resource as sent.
+      http.get(`${BASE}/subscriptions`, wrap('GET', () => ({
+        value: [...this.subscriptions.values()].map((sub) => ({ ...sub, clientState: null })),
+      }))),
+      http.post(`${BASE}/subscriptions`, wrap('POST', ({ body }) => {
+        const input = body as Omit<FakeSubscription, 'id'>
+        const sub = { ...input, id: nextId('sub-'), clientState: input.clientState ?? null }
+        this.subscriptions.set(sub.id, sub)
+        return sub
+      })),
+      http.patch(`${BASE}/subscriptions/:id`, wrap('PATCH', ({ params, body }) => {
+        const sub = this.subscriptions.get(params.id)
+        if (!sub) throw new NotFound()
+        sub.expirationDateTime = (body as { expirationDateTime: string }).expirationDateTime
+        return { ...sub, clientState: null }
+      })),
+      http.delete(`${BASE}/subscriptions/:id`, wrap('DELETE', ({ params }) => {
+        if (!this.subscriptions.delete(params.id)) throw new NotFound()
+        return undefined
+      })),
+
       // ----- lists -----
       http.get(`${BASE}/me/todo/lists/delta`, wrap('GET', ({ url }) => {
         const token = Number(url.searchParams.get('$deltatoken') ?? 0)

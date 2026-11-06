@@ -3,6 +3,7 @@ import type {
   AttachmentBase,
   ChecklistItem,
   OutlookCategory,
+  Subscription,
   TodoTask,
   TodoTaskList,
   User,
@@ -155,6 +156,26 @@ export class TaskService {
     ).get()) as Page<Removable<TodoTask>>
     const { items, deltaLink: next } = await this.collect(first)
     return splitDelta(items, next)
+  }
+
+  // ---------- change-notification subscriptions ----------
+
+  /** This app's change-notification subscriptions for the signed-in user. */
+  async listSubscriptions(): Promise<Subscription[]> {
+    const first = (await this.client.api('/subscriptions').get()) as Page<Subscription>
+    return (await this.collect(first)).items
+  }
+
+  async createSubscription(subscription: Subscription): Promise<Subscription> {
+    return (await this.client.api('/subscriptions').post(subscription)) as Subscription
+  }
+
+  async renewSubscription(id: string, expirationDateTime: string): Promise<void> {
+    await this.client.api(`/subscriptions/${enc(id)}`).patch({ expirationDateTime })
+  }
+
+  async deleteSubscription(id: string): Promise<void> {
+    await this.client.api(`/subscriptions/${enc(id)}`).delete()
   }
 
   async listsDelta(deltaLink?: string): Promise<DeltaResult<TodoTaskList>> {
