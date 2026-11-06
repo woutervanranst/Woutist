@@ -90,6 +90,8 @@ dependencies {
     implementation "androidx.glance:glance-appwidget:1.2.0"
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    // Sync signals (FCM data messages). Only active when google-services.json is present (see the end of this file).
+    implementation "com.google.firebase:firebase-messaging:26.0.1"
     testImplementation "junit:junit:$junitVersion"
     // Android's org.json is a stub in local unit tests; use the real one there.
     testImplementation "org.json:json:20250517"

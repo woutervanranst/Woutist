@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { createGraphClient } from '../services/graphClient'
 import { type NativeAccount, WoutistAuth } from '../native/plugins'
 import { type AuthAdapter, StaticAuthProvider } from './AuthContext'
-import { GRAPH_SCOPES } from './scopes'
+import { API_SCOPES, GRAPH_SCOPES } from './scopes'
 
 let interactive: Promise<string> | null = null
 
@@ -22,6 +22,14 @@ export async function nativeGraphToken(): Promise<string> {
       })
     return interactive
   }
+}
+
+/**
+ * Token for Woutist's own API (sync signals), silent only: it's background work and must never open a
+ * sign-in prompt. The app registration is the same as the web app's, so its consent covers the scope.
+ */
+export async function nativeApiToken(): Promise<string> {
+  return (await WoutistAuth.acquireToken({ scopes: API_SCOPES, interactive: false })).accessToken
 }
 
 /** `AuthAdapter` for the Android app, backed by MSAL Android through the `WoutistAuth` plugin. */
@@ -58,7 +66,7 @@ export function NativeAuthProvider({ children }: { children: ReactNode }) {
     () => ({
       account,
       busy,
-      getApiToken: () => Promise.reject(new Error('Not used on Android')),
+      getApiToken: nativeApiToken,
       signIn,
       signOut,
       createGraphClient: () => createGraphClient(nativeGraphToken),

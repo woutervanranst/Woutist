@@ -54,7 +54,8 @@ export class SyncEngine {
   private statusListeners = new Set<(s: SyncStatus) => void>()
   private eventListeners = new Set<(e: SyncEvent) => void>()
   private syncPromise: Promise<void> | null = null
-  private syncAgain = false
+  /** What to sync once the running sync ends: everything, or just these lists. */
+  private syncAgain: { all: true } | { all: false; lists: Set<string> } | null = null
   private flushPromise: Promise<void> | null = null
   private flushTimer: ReturnType<typeof setTimeout> | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -137,23 +138,35 @@ export class SyncEngine {
 
   // ---------- full sync ----------
 
-  /** Push pending changes, then pull. Concurrent calls share one run (plus one follow-up). */
-  sync(options: { full?: boolean } = {}): Promise<void> {
+  /**
+   * Push pending changes, then pull: every list, or only `lists` (when a change notification names
+   * them). Concurrent calls share one run plus one follow-up covering everything they asked for.
+   */
+  sync(options: { full?: boolean; lists?: readonly string[] } = {}): Promise<void> {
     if (this.syncPromise) {
-      this.syncAgain = true
+      this.queueAgain(options.lists)
       return this.syncPromise
     }
     this.syncPromise = this.runSync(options).finally(() => {
       this.syncPromise = null
-      if (this.syncAgain) {
-        this.syncAgain = false
-        void this.sync()
-      }
+      const again = this.syncAgain
+      this.syncAgain = null
+      if (again) void this.sync(again.all ? {} : { lists: [...again.lists] })
     })
     return this.syncPromise
   }
 
-  private async runSync({ full = false }: { full?: boolean }): Promise<void> {
+  private queueAgain(lists: readonly string[] | undefined) {
+    if (!lists) {
+      this.syncAgain = { all: true }
+    } else if (!this.syncAgain) {
+      this.syncAgain = { all: false, lists: new Set(lists) }
+    } else if (!this.syncAgain.all) {
+      for (const id of lists) this.syncAgain.lists.add(id)
+    }
+  }
+
+  private async runSync({ full = false, lists }: { full?: boolean; lists?: readonly string[] | undefined }): Promise<void> {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       await this.setStatus({ state: 'offline' })
       return
@@ -164,7 +177,8 @@ export class SyncEngine {
       const lastFull = (await this.db.getMeta<number>('lastFullSyncAt')) ?? 0
       const doFull = full || Date.now() - lastFull > FULL_REFRESH_MS
       const listIds = await this.pullLists()
-      await mapLimit(listIds, PARALLEL_LISTS, (id) => this.pullTasks(id, doFull))
+      const pull = lists && !doFull ? await this.listsToPull(listIds, lists) : listIds
+      await mapLimit(pull, PARALLEL_LISTS, (id) => this.pullTasks(id, doFull))
       if (doFull) {
         await this.pullCategories()
         await this.db.setMeta('lastFullSyncAt', Date.now())
@@ -443,6 +457,13 @@ export class SyncEngine {
   }
 
   // ---------- pull ----------
+
+  /** The requested lists that exist, plus any list not read yet (created elsewhere since the last sync). */
+  private async listsToPull(listIds: string[], requested: readonly string[]): Promise<string[]> {
+    const wanted = new Set(requested)
+    const read = await Promise.all(listIds.map((id) => this.db.getMeta<string>(`delta:tasks:${id}`)))
+    return listIds.filter((id, i) => wanted.has(id) || !read[i])
+  }
 
   /** Ids of lists/tasks that still have local changes waiting to be pushed. */
   private async pendingIds(): Promise<{ lists: Set<string>; tasks: Set<string> }> {

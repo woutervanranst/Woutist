@@ -6,7 +6,7 @@ import { getGraphToken } from '../auth/tokens'
 const BASE = 'https://graph.microsoft.com/v1.0'
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-async function call(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
+export async function call(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const token = await getGraphToken()
   const res = await fetch(path.startsWith('http') ? path : `${BASE}${path}`, {
     method,

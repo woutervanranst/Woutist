@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeGraph } from '../../test/fakeGraph'
 import { WoutistDb } from '../db'
 import { createGraphClient } from '../graphClient'
@@ -100,6 +100,82 @@ describe('SyncEngine pull', () => {
     await engine.sync()
     expect((await db.tasks.get(taskId))?.title).toBe('Local')
     expect(await db.outbox.count()).toBe(1)
+  })
+})
+
+describe('SyncEngine targeted sync', () => {
+  const deltaLists = (since: number) =>
+    fake.requests
+      .slice(since)
+      .filter((r) => r.url.pathname.endsWith('/tasks/delta'))
+      .map((r) => decodeURIComponent(r.url.pathname.split('/lists/')[1]!.split('/')[0]!))
+
+  it('pulls only the named lists', async () => {
+    const a = fake.addList('A')
+    const b = fake.addList('B')
+    const ta = fake.addTask(a, { title: 'a1' })
+    const tb = fake.addTask(b, { title: 'b1' })
+    await engine.sync()
+
+    fake.serverUpdate(a, ta, { title: 'a2' })
+    fake.serverUpdate(b, tb, { title: 'b2' })
+    const before = fake.requests.length
+    await engine.sync({ lists: [a] })
+
+    expect(deltaLists(before)).toEqual([a])
+    expect((await db.tasks.get(ta))?.title).toBe('a2')
+    expect((await db.tasks.get(tb))?.title).toBe('b1')
+  })
+
+  it('ignores list ids that no longer exist', async () => {
+    const a = fake.addList('A')
+    await engine.sync()
+    const before = fake.requests.length
+    await engine.sync({ lists: ['gone', a] })
+    expect(deltaLists(before)).toEqual([a])
+    expect(engine.getStatus().state).toBe('idle')
+  })
+
+  it('merges requests made during a sync into one follow-up for those lists', async () => {
+    const a = fake.addList('A')
+    const b = fake.addList('B')
+    const c = fake.addList('C')
+    await engine.sync()
+
+    const before = fake.requests.length
+    const running = engine.sync({ lists: [c] })
+    void engine.sync({ lists: [a] })
+    void engine.sync({ lists: [b] })
+    await running
+    await vi.waitFor(() => expect(deltaLists(before)).toHaveLength(3))
+    expect(deltaLists(before)).toEqual([c, a, b])
+    await vi.waitFor(() => expect(engine.getStatus().state).toBe('idle'))
+  })
+
+  it('a full sync requested during a targeted one is not narrowed', async () => {
+    const a = fake.addList('A')
+    const b = fake.addList('B')
+    await engine.sync()
+
+    const before = fake.requests.length
+    const running = engine.sync({ lists: [a] })
+    void engine.sync()
+    void engine.sync({ lists: [a] })
+    await running
+    await vi.waitFor(() => expect(deltaLists(before)).toHaveLength(3))
+    expect(deltaLists(before).slice(1).sort()).toEqual([a, b].sort())
+    await vi.waitFor(() => expect(engine.getStatus().state).toBe('idle'))
+  })
+
+  it("also pulls a list it hasn't read yet", async () => {
+    const a = fake.addList('A')
+    await engine.sync()
+    const created = fake.addList('Created elsewhere')
+    const task = fake.addTask(created, { title: 'new' })
+    const before = fake.requests.length
+    await engine.sync({ lists: [a] })
+    expect(deltaLists(before).sort()).toEqual([a, created].sort())
+    expect((await db.tasks.get(task))?.title).toBe('new')
   })
 })
 

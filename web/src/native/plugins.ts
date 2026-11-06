@@ -31,7 +31,8 @@ export interface NativeStatus {
 
 /**
  * Native reminders, widget data and notification taps, implemented in Kotlin by `WoutistNativePlugin`.
- * Events: `changed` (a change made on the phone reached Graph: sync) and `navigate` (`{ url }`).
+ * Events: `changed` (Graph changed: a change made on the phone went through, or a sync signal arrived)
+ * and `navigate` (`{ url }`).
  */
 export interface WoutistNativePlugin {
   setSnapshot(options: { snapshot: NativeSnapshot }): Promise<void>
@@ -40,6 +41,10 @@ export interface WoutistNativePlugin {
   requestNotificationPermission(): Promise<{ granted: boolean }>
   openSystemSettings(options: { target: NativeSettingsTarget }): Promise<void>
   consumeLaunchUrl(): Promise<{ url: string | null }>
+  /** This phone's FCM token for sync signals; `null` when the build has no Firebase configuration. */
+  getFcmToken(): Promise<{ token: string | null }>
+  /** Where the account's Graph subscriptions point; the background refresh renews those. */
+  setNotificationUrl(options: { url: string | null }): Promise<void>
   addListener(event: 'changed', listener: () => void): Promise<PluginListenerHandle>
   addListener(event: 'navigate', listener: (e: { url: string }) => void): Promise<PluginListenerHandle>
 }

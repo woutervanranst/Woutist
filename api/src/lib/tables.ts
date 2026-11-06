@@ -34,6 +34,13 @@ export interface ScheduleEntity extends BaseEntity {
   fireAt: string
 }
 
+/** PK = userKey, RK = sha256(FCM token) hex. An Android device that receives sync signals. */
+export interface DeviceEntity extends BaseEntity {
+  token: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** PK = `timer`, RK = `cursor`. */
 export interface StateEntity extends BaseEntity {
   lastProcessedBucket: string
@@ -55,6 +62,7 @@ export interface Store {
   reminders: EntityTable<ReminderEntity>
   schedule: EntityTable<ScheduleEntity>
   state: EntityTable<StateEntity>
+  devices: EntityTable<DeviceEntity>
 }
 
 export const TABLE_NAMES = {
@@ -62,6 +70,7 @@ export const TABLE_NAMES = {
   reminders: 'reminders',
   schedule: 'schedule',
   state: 'state',
+  devices: 'devices',
 } as const
 
 function statusOf(err: unknown): number | undefined {
@@ -165,5 +174,6 @@ export function createAzureStore(settings: TableSettings): Store {
     reminders: new AzureEntityTable<ReminderEntity>(makeClient(TABLE_NAMES.reminders)),
     schedule: new AzureEntityTable<ScheduleEntity>(makeClient(TABLE_NAMES.schedule)),
     state: new AzureEntityTable<StateEntity>(makeClient(TABLE_NAMES.state)),
+    devices: new AzureEntityTable<DeviceEntity>(makeClient(TABLE_NAMES.devices)),
   }
 }

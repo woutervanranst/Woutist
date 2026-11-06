@@ -18,10 +18,16 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.reminders.Notifications
 import com.wouteronarchitecture.woutist.reminders.ReminderScheduler
+import com.wouteronarchitecture.woutist.sync.WoutistMessagingService
 import com.wouteronarchitecture.woutist.work.RefreshWorker
 import com.wouteronarchitecture.woutist.work.TaskOpWorker
 
@@ -32,6 +38,7 @@ import com.wouteronarchitecture.woutist.work.TaskOpWorker
 )
 class WoutistNativePlugin : Plugin() {
     private var launchUrl: String? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val store get() = SnapshotStore.get(context)
 
@@ -53,6 +60,28 @@ class WoutistNativePlugin : Plugin() {
 
     override fun handleOnDestroy() {
         NativeEvents.onChanged = null
+        scope.cancel()
+    }
+
+    /** This device's FCM token for sync signals (`null` when the build has no Firebase configuration). */
+    @PluginMethod
+    fun getFcmToken(call: PluginCall) {
+        scope.launch {
+            val token = try {
+                WoutistMessagingService.token(context)
+            } catch (e: Exception) {
+                Log.w("Woutist", "Reading the FCM token failed", e)
+                null
+            }
+            call.resolve(JSObject().put("token", token ?: JSObject.NULL))
+        }
+    }
+
+    /** Where the account's Graph subscriptions point, so the background refresh renews just those. */
+    @PluginMethod
+    fun setNotificationUrl(call: PluginCall) {
+        store.notificationUrl = call.getString("url")
+        call.resolve()
     }
 
     @PluginMethod

@@ -2,12 +2,17 @@ package com.wouteronarchitecture.woutist.work
 
 import android.content.Context
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.wouteronarchitecture.woutist.R
+import com.wouteronarchitecture.woutist.reminders.Notifications
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -19,7 +24,9 @@ import com.wouteronarchitecture.woutist.data.GraphHttpException
 import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.data.SortPref
+import com.wouteronarchitecture.woutist.sync.SubscriptionRenewal
 import java.io.IOException
+import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
@@ -30,6 +37,18 @@ enum class RefreshOutcome { Refreshed, Skipped, NeedsSignIn, Retry }
  * app, the web) get armed and the widget stays current.
  */
 class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    /** Expedited work ([refreshNow]) runs as a foreground service before Android 12, which needs a notification. */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        Notifications.ensureSyncChannel(applicationContext)
+        val notification = NotificationCompat.Builder(applicationContext, Notifications.SYNC_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_woutist)
+            .setContentTitle(applicationContext.getString(R.string.syncing))
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .build()
+        return ForegroundInfo(SYNC_NOTIFICATION_ID, notification)
+    }
+
     override suspend fun doWork(): Result {
         AuthManager.init(applicationContext)
         val store = SnapshotStore.get(applicationContext)
@@ -40,12 +59,22 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             graph.fetchSnapshot(key, zone, sort, fallbackCompleted = store.current()?.completedToday.orEmpty())
         }
         Log.i("Woutist", "Background refresh: $outcome")
+        if (outcome != RefreshOutcome.NeedsSignIn) {
+            // Keeps near-instant sync alive while only the phone is used. Best effort: the app retries too.
+            try {
+                val renewed = SubscriptionRenewal.run(store.notificationUrl, Instant.now(), graph::listSubscriptions, graph::renewSubscription)
+                if (renewed > 0) Log.i("Woutist", "Renewed $renewed Graph subscription(s)")
+            } catch (e: Exception) {
+                Log.w("Woutist", "Checking Graph subscriptions failed", e)
+            }
+        }
         return if (outcome == RefreshOutcome.Retry) Result.retry() else Result.success()
     }
 
     companion object {
         private const val PERIODIC = "refresh"
         private const val NOW = "refresh-now"
+        private const val SYNC_NOTIFICATION_ID = 2
 
         /**
          * Replace the stored snapshot with Graph's, keeping the app's preferences (sort, quick dates). Skipped without
@@ -84,6 +113,18 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         /** One refresh as soon as the phone is online, e.g. after a change made from a notification. */
         fun refreshSoon(context: Context) {
             val request = OneTimeWorkRequestBuilder<RefreshWorker>().setConstraints(online).build()
+            WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.REPLACE, request)
+        }
+
+        /**
+         * Refresh right away: a sync signal (FCM) says something changed in Graph. Expedited, so it runs
+         * within seconds even with the app closed (as normal work once the expedited quota is used up).
+         */
+        fun refreshNow(context: Context) {
+            val request = OneTimeWorkRequestBuilder<RefreshWorker>()
+                .setConstraints(online)
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.REPLACE, request)
         }
 

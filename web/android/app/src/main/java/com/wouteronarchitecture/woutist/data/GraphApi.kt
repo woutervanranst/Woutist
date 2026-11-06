@@ -23,6 +23,9 @@ interface TaskGraph {
     suspend fun createTask(listId: String, title: String, important: Boolean, dueDate: String?, reminderAt: String?, notes: String?): SnapTask
 }
 
+/** One of this app's Graph change-notification subscriptions for the user. */
+data class GraphSubscription(val id: String, val notificationUrl: String, val expiresAt: Instant)
+
 /** Graph answered with a non-success status. */
 class GraphHttpException(val status: Int, message: String) : Exception("Graph $status: $message")
 
@@ -103,6 +106,19 @@ class GraphApi(
             .filter { it.optString("status") == "completed" }
             .map { GraphMapping.task(it, listId, zone) }
             .filter { it.completedDate == today }
+    }
+
+    /** This app's change-notification subscriptions for the signed-in user. */
+    suspend fun listSubscriptions(): List<GraphSubscription> =
+        getAll(BASE.newBuilder().addPathSegment("subscriptions").build(), zone).mapNotNull { item ->
+            val expires = runCatching { Instant.parse(item.optString("expirationDateTime")) }.getOrNull()
+            val id = item.optString("id")
+            if (expires == null || id.isEmpty()) null else GraphSubscription(id, item.optString("notificationUrl"), expires)
+        }
+
+    suspend fun renewSubscription(id: String, expiresAt: Instant) {
+        val url = BASE.newBuilder().addPathSegment("subscriptions").addPathSegment(id).build()
+        send("PATCH", url, JSONObject().put("expirationDateTime", expiresAt.toString()))
     }
 
     /** Every item of a collection, following `@odata.nextLink` (only to Graph itself: it carries the token). */
