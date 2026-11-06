@@ -32,12 +32,25 @@ class SnapshotStore(
     private var ops: List<PendingOp> = read(PENDING)?.let { json ->
         runCatching { JSONArray(json).let { a -> (0 until a.length()).map { PendingOp.fromJson(a.getJSONObject(it)) } } }.getOrNull()
     } ?: emptyList()
-    private var signInFlag: Boolean = read(FLAGS)?.let { runCatching { JSONObject(it).optBoolean("needsSignIn") }.getOrNull() } ?: false
+    private val flags: JSONObject? = read(FLAGS)?.let { runCatching { JSONObject(it) }.getOrNull() }
+    private var signInFlag: Boolean = flags?.optBoolean("needsSignIn") ?: false
+    private var hookUrl: String? = flags?.optString("notificationUrl")?.takeIf { it.isNotEmpty() }
 
     /** Set by background work when Graph needs an interactive sign-in; cleared when the app sends a snapshot. */
     var needsSignIn: Boolean
         get() = synchronized(lock) { signInFlag }
         set(value) = mutate { signInFlag = value; saveFlags() }
+
+    /**
+     * Where this account's Graph subscriptions send notifications (from the app), so background work renews
+     * only those. Not a change to the account's data: listeners aren't notified.
+     */
+    var notificationUrl: String?
+        get() = synchronized(lock) { hookUrl }
+        set(value) = synchronized(lock) {
+            hookUrl = value
+            saveFlags()
+        }
 
     /** The app's latest snapshot. Another account's snapshot first drops this account's pending operations. */
     fun replaceBase(s: Snapshot) = mutate { replace(s) }
@@ -126,6 +139,7 @@ class SnapshotStore(
         base = null
         ops = emptyList()
         signInFlag = false
+        hookUrl = null
         listOf(BASE, PENDING, FLAGS).forEach { File(dir, it).delete() }
     }
 
@@ -139,7 +153,8 @@ class SnapshotStore(
 
     private fun saveBase() = write(BASE, base?.toJson())
     private fun savePending() = write(PENDING, JSONArray(ops.map { it.toJson() }).toString())
-    private fun saveFlags() = write(FLAGS, JSONObject().put("needsSignIn", signInFlag).toString())
+    private fun saveFlags() =
+        write(FLAGS, JSONObject().put("needsSignIn", signInFlag).put("notificationUrl", hookUrl ?: JSONObject.NULL).toString())
 
     private fun read(name: String): String? = File(dir, name).takeIf { it.exists() }?.readText()
 

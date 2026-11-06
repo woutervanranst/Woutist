@@ -99,3 +99,6 @@ app/src/main/assets/public
 app/src/main/assets/capacitor.config.json
 app/src/main/assets/capacitor.plugins.json
 app/src/main/res/xml/config.xml
+
+# Firebase configuration for sync signals: from the FIREBASE_GOOGLE_SERVICES_JSON secret in CI, or a local copy.
+app/google-services.json

@@ -65,6 +65,13 @@
             </intent-filter>
         </receiver>
 
+        <!-- Sync signals: Graph changed elsewhere, refresh now (FCM data messages from the Woutist API). -->
+        <service android:name=".sync.WoutistMessagingService" android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Home-screen task list widget and the screen that picks its list. -->
         <receiver
             android:name=".widget.TaskListWidgetReceiver"
@@ -99,6 +106,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Expedited refreshes run as a short foreground service before Android 12. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Exact reminder times; without it reminders fall back to inexact alarms. Never USE_EXACT_ALARM. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

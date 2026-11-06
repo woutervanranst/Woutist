@@ -43,4 +43,28 @@ class GraphApiTest {
         assertFalse(sent.has("isReminderOn"))
         assertFalse(sent.has("reminderDateTime"))
     }
+
+    private fun respond(code: Int, body: String, seen: MutableList<okhttp3.Request>) = GraphApi({ "token" }, zone, OkHttpClient.Builder().addInterceptor { chain ->
+        seen += chain.request()
+        Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(code).message("OK")
+            .body(body.toResponseBody("application/json".toMediaType())).build()
+    }.build())
+
+    @Test fun listsSubscriptions() = runBlocking {
+        val seen = mutableListOf<okhttp3.Request>()
+        val body = """{"value":[{"id":"S1","resource":"/me/todo/lists/L1/tasks","notificationUrl":"https://api.test/n","expirationDateTime":"2026-11-08T10:00:00Z","clientState":null}]}"""
+        val subs = respond(200, body, seen).listSubscriptions()
+        assertEquals("https://graph.microsoft.com/v1.0/subscriptions", seen.single().url.toString())
+        assertEquals(listOf(GraphSubscription("S1", "https://api.test/n", java.time.Instant.parse("2026-11-08T10:00:00Z"))), subs)
+    }
+
+    @Test fun renewsASubscription() = runBlocking {
+        val seen = mutableListOf<okhttp3.Request>()
+        respond(200, """{"id":"S1"}""", seen).renewSubscription("S1", java.time.Instant.parse("2026-11-09T10:00:00Z"))
+        val req = seen.single()
+        assertEquals("PATCH", req.method)
+        assertEquals("https://graph.microsoft.com/v1.0/subscriptions/S1", req.url.toString())
+        val sent = JSONObject(Buffer().also { req.body!!.writeTo(it) }.readUtf8())
+        assertEquals("2026-11-09T10:00:00Z", sent.getString("expirationDateTime"))
+    }
 }

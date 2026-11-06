@@ -120,4 +120,18 @@ class SnapshotStoreTest {
         assertEquals(emptyList<PendingOp>(), s.pending())
         assertEquals(null, store().current())
     }
+
+    @Test fun notificationUrlSurvivesRestartWithoutNotifying() {
+        val first = store()
+        first.notificationUrl = "https://api.test/api/graph-notify?u=user"
+        assertEquals(0, changes)
+        assertEquals("https://api.test/api/graph-notify?u=user", SnapshotStore(dir.root, clock).notificationUrl)
+    }
+
+    @Test fun clearForgetsNotificationUrl() {
+        val s = store()
+        s.notificationUrl = "https://api.test/n"
+        s.clear()
+        assertEquals(null, SnapshotStore(dir.root, clock).notificationUrl)
+    }
 }

@@ -32,6 +32,16 @@ object Notifications {
         )
     }
 
+    const val SYNC_CHANNEL = "sync"
+
+    /** Quiet channel for the brief "getting the latest changes" notice of expedited refreshes (Android 11 and older). */
+    fun ensureSyncChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = context.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(SYNC_CHANNEL) != null) return
+        nm.createNotificationChannel(NotificationChannel(SYNC_CHANNEL, context.getString(R.string.channel_sync), NotificationManager.IMPORTANCE_MIN))
+    }
+
     /** Notifications are tagged with the task id (no hash collisions); the id is always this. */
     private const val ID = 1
 

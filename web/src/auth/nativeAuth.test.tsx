@@ -10,7 +10,7 @@ const plugin = vi.hoisted(() => ({
 }))
 vi.mock('../native/plugins', () => ({ WoutistAuth: plugin }))
 
-const { NativeAuthProvider, nativeGraphToken } = await import('./nativeAuth')
+const { NativeAuthProvider, nativeApiToken, nativeGraphToken } = await import('./nativeAuth')
 
 const account = { key: 'oid.tid', name: 'W', username: 'w@x' }
 const signInRequired = Object.assign(new Error('Sign-in required'), { code: 'sign_in_required' })
@@ -61,6 +61,23 @@ describe('nativeGraphToken', () => {
   })
 })
 
+describe('nativeApiToken', () => {
+  it("asks MSAL silently for the API's scope", async () => {
+    plugin.acquireToken.mockResolvedValueOnce({ accessToken: 'api-token' })
+    await expect(nativeApiToken()).resolves.toBe('api-token')
+    expect(plugin.acquireToken).toHaveBeenCalledWith({
+      scopes: [expect.stringMatching(/^api:\/\/.+\/Reminders\.ReadWrite$/)],
+      interactive: false,
+    })
+  })
+
+  it('never prompts: sync signals are background work', async () => {
+    plugin.acquireToken.mockRejectedValueOnce(signInRequired)
+    await expect(nativeApiToken()).rejects.toBe(signInRequired)
+    expect(plugin.acquireToken).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('NativeAuthProvider', () => {
   it('exposesAccount', async () => {
     plugin.getAccount.mockResolvedValue({ account })
@@ -88,10 +105,11 @@ describe('NativeAuthProvider', () => {
     expect(auth.current?.account).toEqual(account)
   })
 
-  it('rejects API tokens (the Android app has no push API)', async () => {
+  it('gets API tokens (sync signals) from native MSAL', async () => {
     plugin.getAccount.mockResolvedValue({ account })
     const auth = renderProvider()
     await waitFor(() => expect(auth.current?.account).toEqual(account))
-    await expect(auth.current!.getApiToken()).rejects.toThrow('Not used on Android')
+    plugin.acquireToken.mockResolvedValueOnce({ accessToken: 'api-token' })
+    await expect(auth.current!.getApiToken()).resolves.toBe('api-token')
   })
 })
