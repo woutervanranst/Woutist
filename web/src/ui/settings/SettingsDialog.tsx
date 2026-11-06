@@ -46,21 +46,6 @@ export function SettingsDialog({ open, onClose, extra }: Props) {
         <DialogBody>
           <DialogTitle>Settings</DialogTitle>
           <DialogContent>
-            <div className={styles.section}>
-              <Subtitle2>Appearance</Subtitle2>
-              <Field label="Theme">
-                <RadioGroup
-                  layout="horizontal"
-                  value={prefs.theme}
-                  onChange={(_, d) => update((p) => ({ ...p, theme: d.value as ThemePref }))}
-                >
-                  <Radio value="system" label="System" />
-                  <Radio value="light" label="Light" />
-                  <Radio value="dark" label="Dark" />
-                </RadioGroup>
-              </Field>
-            </div>
-            <Divider />
             <DateReminderSettings />
             <Divider />
             <div className={styles.section} style={{ marginTop: 16 }}>
@@ -91,6 +76,21 @@ export function SettingsDialog({ open, onClose, extra }: Props) {
               </Button>
             </div>
             {extra}
+            <Divider />
+            <div className={styles.section} style={{ marginTop: 16 }}>
+              <Subtitle2>Appearance</Subtitle2>
+              <Field label="Theme">
+                <RadioGroup
+                  layout="horizontal"
+                  value={prefs.theme}
+                  onChange={(_, d) => update((p) => ({ ...p, theme: d.value as ThemePref }))}
+                >
+                  <Radio value="system" label="System" />
+                  <Radio value="light" label="Light" />
+                  <Radio value="dark" label="Dark" />
+                </RadioGroup>
+              </Field>
+            </div>
             <Divider />
             <Caption1 style={{ display: 'block', marginTop: 12 }}>
               Woutist {__APP_VERSION__}. Your tasks live in Microsoft To Do; Woutist only keeps an offline
