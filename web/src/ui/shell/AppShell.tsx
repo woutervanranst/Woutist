@@ -61,6 +61,16 @@ const useStyles = makeStyles({
     paddingLeft: 'env(safe-area-inset-left, 0px)',
     paddingRight: 'env(safe-area-inset-right, 0px)',
   },
+  // The drawer is portalled to <body>, outside the root's safe-area padding, so it needs its own
+  // to keep the lists clear of the status bar and the navigation bar (edge-to-edge on Android).
+  // The background matches Sidebar's so the padded strips don't show the drawer's default colour.
+  drawer: {
+    boxSizing: 'border-box',
+    paddingTop: 'env(safe-area-inset-top, 0px)',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    paddingLeft: 'env(safe-area-inset-left, 0px)',
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -170,6 +180,7 @@ export function AppShell() {
           open={navOpen && (!showSidebarInline || hideSidebarForDetail)}
           onOpenChange={(_, d) => setNavOpen(d.open)}
           size="small"
+          className={styles.drawer}
         >
           <Sidebar onNavigate={() => setNavOpen(false)} />
         </OverlayDrawer>
