@@ -6,8 +6,8 @@ import { endpointKey } from '../src/lib/keys'
 import { signalUser } from '../src/services/syncSignals'
 import { createTestContext, KEY_A, KEY_B, makeRequest, TENANT_B, USER_B } from './helpers'
 
-const TOKEN_1 = 'fcm-token-1:APA91bHk_0123456789'
-const TOKEN_2 = 'fcm-token-2:APA91bHk_abcdefghij'
+const TOKEN_1 = 'device-one'
+const TOKEN_2 = 'device-two'
 
 describe('PUT /api/devices', () => {
   it('stores an FCM token keyed by sha256(token)', async () => {
