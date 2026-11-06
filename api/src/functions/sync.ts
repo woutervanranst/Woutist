@@ -13,7 +13,7 @@ app.http('graphHook', {
 app.http('graphNotify', {
   methods: ['POST'],
   authLevel: 'anonymous',
-  route: 'graph-notify',
+  route: 'graph-notify/{user}/{version}',
   handler: (request, context) => runHttp(context, (deps) => handleGraphNotify(request, deps)),
 })
 

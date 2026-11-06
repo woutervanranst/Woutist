@@ -8,6 +8,8 @@
 | Function App (Flex Consumption, Node 24) | `func-woutist` | `https://func-woutist.azurewebsites.net/api`; system-assigned identity |
 | Storage account | `stwoutist5e32d4` | Functions host storage, deployment container `app-package-func-woutist`, Woutist tables |
 | Application Insights | `func-woutist` | Function logs |
+| Web PubSub (Free) | `wps-woutist` | Sync signals to open web tabs (hub `sync`); the Function App's identity is *Web PubSub Service Owner* |
+| Firebase project | (Google) | FCM sync signals to the Android app; not an Azure resource. See [Near-instant sync](#near-instant-sync) |
 | User-assigned identity | `id-woutist-github` | GitHub Actions OIDC deploys of the Function App (created by `scripts/setup-github.sh`) |
 | Entra app registration | `Woutist` | See [entra-app-registration.md](entra-app-registration.md) |
 
@@ -18,11 +20,15 @@ The Function App reaches storage with **its managed identity** (`AzureWebJobsSto
 | Setting | Meaning |
 |---|---|
 | `AzureWebJobsStorage__accountName` | Identity-based host storage |
-| `TABLES_ENDPOINT` | `https://<account>.table.core.windows.net` (subscriptions, reminders, schedule, state tables) |
+| `TABLES_ENDPOINT` | `https://<account>.table.core.windows.net` (subscriptions, reminders, schedule, state, devices tables) |
 | `ENTRA_CLIENT_ID` | Expected `aud` of incoming access tokens |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push key pair. **The private key exists only here.** |
 | `VAPID_SUBJECT` | Contact URL sent to push services (`https://woutist.wouteronarchitecture.com`) |
 | `ALLOWED_USERS` | Optional allowlist: comma-separated `tenantId` or `tenantId:objectId` entries. Empty means anyone with a Microsoft account. |
+| `GRAPH_HOOK_SECRET` | 32+ random characters; key of the per-user `clientState` of Graph subscriptions. Rotating it makes devices re-create their subscriptions. Without it (or `PUBLIC_API_BASE_URL`), the sync endpoints answer 503 and the apps just poll |
+| `PUBLIC_API_BASE_URL` | `https://func-woutist.azurewebsites.net`: Graph posts change notifications to `<this>/api/graph-notify/…` |
+| `WEBPUBSUB_ENDPOINT` / `WEBPUBSUB_HUB` | `https://wps-woutist.webpubsub.azure.com` and `sync`; reached with the managed identity. Locally, `WEBPUBSUB_CONNECTION_STRING` instead. Optional: without it, open web tabs get no signals |
+| `FCM_SERVICE_ACCOUNT` | Firebase service-account key (the JSON, on one line) for FCM HTTP v1. Optional: without it, phones get no signals |
 
 CORS allows only the site's origins (custom domain and default SWA host) and `http://localhost:5173`.
 
@@ -48,6 +54,18 @@ az functionapp config appsettings set -g rg-woutist -n func-woutist --settings \
 az functionapp config appsettings delete -g rg-woutist -n func-woutist --setting-names AzureWebJobsStorage
 az functionapp cors add -g rg-woutist -n func-woutist --allowed-origins https://<swa-host> http://localhost:5173
 ```
+
+## Near-instant sync
+
+One-time, after the Function App exists: `scripts/setup-sync.sh [service-account.json] [google-services.json]`. It creates the Web PubSub resource and its role assignment and sets the app settings above (an existing `GRAPH_HOOK_SECRET` is kept). With the two optional files, it also sets `FCM_SERVICE_ACCOUNT` and the `FIREBASE_GOOGLE_SERVICES_JSON` CI secret.
+
+**Firebase** (only for the Android app):
+1. Create a Firebase project. In its Cloud Messaging settings, keep the *Firebase Cloud Messaging API (V1)* enabled.
+2. Add two Android apps, `com.wouteronarchitecture.woutist` and `com.wouteronarchitecture.woutist.debug`, and download `google-services.json` (it holds both).
+3. For local builds, copy it to `web/android/app/google-services.json` (git-ignored). Without it the app builds and works, just without FCM.
+4. *Project settings → Service accounts → Generate new private key* gives the service-account JSON for `FCM_SERVICE_ACCOUNT`. Keep it out of the repo.
+
+**Locally**, Graph needs a public HTTPS URL for the API: run a tunnel (`cloudflared tunnel --url http://localhost:7071`) and set `PUBLIC_API_BASE_URL` to it. `scripts/graph-webhook-receiver.mjs` with `__woutist.spikeWebhooks(url)` checks Graph's behaviour without the API.
 
 ## Custom domain
 
@@ -75,7 +93,7 @@ Pushes to `main` and pull requests run the checks only (lint, typecheck, test, b
 A release is a pushed tag `v<version>` (see [Releasing](#releasing)). It runs the same checks and then:
 1. deploys the web app to SWA
 2. deploys the API to Functions
-3. builds the signed Android APK and attaches it to the GitHub Release
+3. builds the signed Android APK (with `google-services.json` from the `FIREBASE_GOOGLE_SERVICES_JSON` secret, when set) and attaches it to the GitHub Release
 
 The version shown in Settings is derived from git: exactly `0.4.0` on the tag build, `0.4.0-5-gabc1234` on builds after it.
 

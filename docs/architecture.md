@@ -14,7 +14,8 @@ Everything Woutist keeps for itself is disposable:
 | Offline cache + outbox of pending changes | IndexedDB (Dexie), one DB per account: `woutist-<homeAccountId>` | Deleted on sign-out |
 | UI preferences (theme, sort, visible smart lists) | `localStorage`, per account | Deleted on sign-out |
 | Quick dates, reminder times, reminder rule | `localStorage`, plus an open extension on the default list in Graph | The local copy is deleted on sign-out; the extension stays with the account |
-| Push subscriptions, reminder schedule, timer cursor | Azure Table Storage (Function App's storage account) | Derived from Graph; removable from Settings |
+| Push subscriptions, reminder schedule, timer cursor, phones' FCM tokens | Azure Table Storage (Function App's storage account) | Derived from Graph; removable from Settings |
+| Change-notification subscriptions (one per list) | Microsoft Graph (`/subscriptions`) | Expire within 3 days unless a Woutist device renews them |
 
 ## Web app (`web/`)
 
@@ -45,7 +46,7 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
    - A full refresh runs on first sync and every 6 hours.
    - **Server data never overwrites an entity with unsynced local changes.**
    - **Categories** are the one exception to the outbox: Settings > Categories (`CategoryService`) writes Outlook master categories straight to Graph, online only, so a failure shows in the dialog. Tasks hold category names as plain strings, so renaming or deleting a category also rewrites the tasks that carry it, and those edits do go through the outbox. Graph won't rename a category: `PATCH displayName` answers success but keeps the old name. So a rename sends the PATCH, trusts it only if the returned name matches, and otherwise creates the new category, re-tags the tasks and deletes the old one. Needs `MailboxSettings.ReadWrite`.
-5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change.
+5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change. A **sync signal** (see [Near-instant sync](#near-instant-sync)) pulls just the lists it names, within a second or two of the change.
 
 ### Dates and reminders
 
@@ -69,6 +70,30 @@ Quick dates, reminder times and the reminder rule are saved in the Microsoft acc
 
 Reads send `Prefer: outlook.timezone="<browser IANA zone>"`. Due dates are calendar dates (`YYYY-MM-DD`) in the user's zone. Reminders are absolute instants. Writes send local wall time plus the IANA zone. Values written by other clients in other zones (including UTC) are converted correctly.
 
+## Near-instant sync
+
+A change made anywhere (Woutist on another device, the official To Do app, Outlook) reaches every Woutist device in seconds. Graph tells the API, and the API tells the devices to sync. The API still never reads Graph and never sees task content: only list ids pass through.
+
+```
+Graph ──change notification──► POST /api/graph-notify/<user>/<v>
+                                   │ clientState must be HMAC(secret, user)
+                                   ├─► Web PubSub, to the user ──► open web tabs: sync those lists
+                                   └─► FCM data message ──────────► phone: background refresh + app sync
+```
+
+- **Subscriptions.** Graph only notifies per list (`/me/todo/lists/{id}/tasks`), for at most 4230 minutes. Every device keeps them current after a sync, at most every 12 hours (`graphSubscriptions.ts`):
+  - it creates the missing ones, with the URL and `clientState` from `GET /api/graph-hook`;
+  - it renews those with less than 36 hours left;
+  - it deletes those of lists that are gone (Graph keeps them, verified 2026-11-06).
+
+  Graph is the record, so devices coordinate without a server table. The phone's background refresh renews them too, so they stay alive while only the phone is used.
+- **The notification URL** carries the user key and a fingerprint of `GRAPH_HOOK_SECRET`. Rotating the secret therefore changes the URL: devices create new subscriptions, and the old ones (with the old `clientState`) expire unrenewed. Subscriptions of other environments (a dev tunnel, say) have other URLs and are left alone.
+- **Web.** While the page is visible, `RealtimeClient` holds a WebSocket to Azure Web PubSub (`GET /api/realtime` returns a URL for the user, which can't publish). Signals within 300 ms are merged into one targeted sync. A dropped connection is retried with backoff, and a full sync follows once it's back. Hidden pages disconnect; they sync when shown again anyway. Polling stays as the safety net.
+- **Android.** The app registers its FCM token (`PUT /api/devices`, removed on sign-out or when FCM says it's gone). A high-priority data message starts an expedited `RefreshWorker` run, so the widget and reminder alarms follow even with the app closed. It also tells the running app to sync.
+- **The device that made the change** gets the signal too. That costs one delta request that finds nothing.
+
+Latency measured on 2026-11-06 (personal account): changes through Graph arrived 0.4–1.5 s later, and an edit in the official app arrived well within 37 s.
+
 ## Reminder push (`api/`)
 
 Graph can't notify a browser at a reminder's time, and SPA refresh tokens can't be used by a server. Woutist therefore runs a small **scheduler that never touches Graph**:
@@ -87,6 +112,7 @@ The API runs on a **standalone Flex Consumption Function App**. SWA "bring your 
 - **Move to another list** is create + delete. The task gets a new id and creation date, and attachments are copied.
 - **Duplicate notifications** while the official To Do app is installed next to Woutist (both fire). On a phone with both Woutist builds and the official app, one reminder can notify up to three times (Woutist, Woutist dev, To Do).
 - **Official phone app and short-notice reminders.** The official To Do phone app schedules reminders on the phone and fires only those it has synced. Changes made in Microsoft's own apps reach the phone within a minute. Changes made through Graph (Woutist, or any other third-party app) reach it only when it next syncs, for example when it's opened. A reminder set in Woutist one minute ahead does not fire in the official app unless it's opened first; it fires correctly once the app has synced (tested 2026-11-05). Woutist's own push covers this while Woutist is in use.
+- **Near-instant sync needs an active device.** Graph subscriptions expire after about 3 days unless a Woutist device (web or phone) renews them. After a longer break, the first sync recreates them; until then, polling covers it.
 - Woutist pushes cover reminders that some Woutist device has synced. A task completed elsewhere before that sync can still produce one stale (labelled) notification. The official app's reminders are unaffected.
 - Work/school tenants that only allow consent for verified publishers need an admin to approve the app.
 - **Brave** turns off Google's push service by default, so turning on reminders fails with "Registration failed - push service error". Fix: turn on *Use Google services for push messaging* in `brave://settings/privacy` and restart Brave. Settings shows this hint.
@@ -104,7 +130,7 @@ The same React app runs in a Capacitor 8 shell. Two builds install side by side:
 
 **Native operations** go to Graph through WorkManager (`TaskOpWorker`, network required, exponential backoff). A 404 drops the operation (the task is gone). "Sign-in required" keeps it and flags the account, and it is retried as soon as the app sends a snapshot again.
 
-**Background refresh.** `RefreshWorker` reads lists, open tasks and tasks completed today from Graph every 30 minutes (Android may stretch this) and right after a native operation, so reminders set in the official app or on the web get armed while Woutist is closed. It keeps the app's sort preferences and quick dates, and leaves the snapshot alone while the app has unsent changes, or if the app pushed a newer one during the fetch.
+**Background refresh.** `RefreshWorker` reads lists, open tasks and tasks completed today from Graph every 30 minutes (Android may stretch this), right after a native operation, and **within seconds of a sync signal** (FCM, as expedited work; on Android 11 and older that shows a quiet "Getting the latest changes" notification while it runs). So reminders set in the official app or on the web get armed while Woutist is closed. Each run also renews the account's Graph subscriptions that are about to expire. It keeps the app's sort preferences and quick dates, and leaves the snapshot alone while the app has unsent changes, or if the app pushed a newer one during the fetch.
 
 **Widget and quick add.** A Glance widget shows a list, Today, Important or Planned in the app's sort order (same rules as `widgetTasks` and `widgetDoneTasks`, checked against a shared fixture). Today lists open tasks due today or earlier (a reminder-only task counts on its reminder's day, as in Planned), then the tasks completed today, ticked and struck through. Ticking completes a task (on Today it moves to the completed rows right away); tapping opens it. The header's refresh arrow runs the background refresh right away (skipped, like the scheduled one, while the app has unsent changes). Its "+", the app icon's **Add a task** shortcut and **Share to Woutist** open a small dialog over the home screen. Like the app, one control sets the date (your quick dates from Settings, or a picked date) and, optionally, a reminder hour on it (your reminder times, or any other time). Quick dates follow the same rules in Kotlin and TypeScript, checked against one fixture. A task added from Important is starred; one added from Today or Planned starts due today.
 
@@ -115,4 +141,4 @@ The same React app runs in a Capacitor 8 shell. Two builds install side by side:
 - **Snooze is local.** Other devices and the official app don't know about it.
 - **Battery managers (OnePlus and others)** can delay background refresh. Reminders already on the phone fire on time (alarm clocks), but a reminder set elsewhere may only arrive at the next refresh or app start. Allowing background activity helps.
 - **Work and school accounts** are best effort: no Intune app protection (MAM) support, and tenants may require admin consent.
-- The widget and notifications show what the phone last synced. A change made elsewhere shows after the next refresh.
+- The widget and notifications show what the phone last synced. With sync signals, a change made elsewhere shows within seconds; without them (no Firebase configuration in the build, or FCM delayed by a battery manager), after the next refresh.

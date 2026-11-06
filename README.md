@@ -8,6 +8,7 @@ Live at **https://woutist.wouteronarchitecture.com**.
 - **Today** gathers what's due or overdue across all lists, plus what you completed today.
 - **One control for date and reminder**, with quick dates and reminder hours you set up once in Settings. They follow you to every device.
 - **Offline-first.** Data is cached in IndexedDB and changes queue in an outbox while offline.
+- **Near-instant sync.** A change made anywhere, including the official To Do app, shows on your other devices and the Android widget within seconds (Graph change notifications, relayed by the API).
 - **Push reminders** come from a small Azure Functions scheduler that never touches Graph.
 
 ## Android

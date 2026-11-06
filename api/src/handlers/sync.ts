@@ -1,5 +1,5 @@
 // Near-instant sync: Graph change notifications in, "sync these lists" signals out to the user's devices.
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { GraphHookResponse, RealtimeResponse } from '@woutist/contracts'
 import { requireUser } from '../lib/auth'
 import {
@@ -26,6 +26,15 @@ function clientStateFor(secret: string, userKey: string): string {
   return createHmac('sha256', secret).update(userKey, 'utf8').digest('base64url')
 }
 
+/**
+ * A short fingerprint of the secret in the notification URL: rotating the secret changes the URL, so
+ * devices treat old subscriptions (with the old clientState) as someone else's, let them expire and
+ * create new ones. The handler itself ignores it.
+ */
+function secretVersion(secret: string): string {
+  return createHash('sha256').update(secret, 'utf8').digest('base64url').slice(0, 8)
+}
+
 function sameString(a: string, b: string): boolean {
   const left = Buffer.from(a, 'utf8')
   const right = Buffer.from(b, 'utf8')
@@ -39,7 +48,8 @@ export function handleGetGraphHook(req: ApiRequest, deps: HandlerDeps): Promise<
     const sync = requireSync(deps)
     const base = sync.publicBaseUrl.replace(/\/+$/, '')
     const response: GraphHookResponse = {
-      notificationUrl: `${base}/api/graph-notify?u=${encodeURIComponent(user.userKey)}`,
+      // Path only: Graph appends its own query (?validationToken=) to this URL.
+      notificationUrl: `${base}/api/graph-notify/${encodeURIComponent(user.userKey)}/${secretVersion(sync.hookSecret)}`,
       clientState: clientStateFor(sync.hookSecret, user.userKey),
     }
     return okJson(response)
@@ -47,21 +57,21 @@ export function handleGetGraphHook(req: ApiRequest, deps: HandlerDeps): Promise<
 }
 
 /**
- * POST /api/graph-notify?u=<userKey> (anonymous: Graph calls it).
+ * POST /api/graph-notify/<userKey>/<secret version> (anonymous: Graph calls it).
  * Answers Graph's validation request, then signals the user for every list whose notification carries
  * the user's clientState. Anything else is dropped with 202, so callers learn nothing.
  */
 export function handleGraphNotify(req: ApiRequest, deps: HandlerDeps): Promise<ApiResponse> {
   return handleErrors(deps.log, async () => {
     const sync = requireSync(deps)
-    const params = new URL(req.url ?? '', 'http://localhost').searchParams
-    const validationToken = params.get('validationToken')
+    const url = new URL(req.url ?? '', 'http://localhost')
+    const validationToken = url.searchParams.get('validationToken')
     if (validationToken !== null) {
       return { status: 200, body: validationToken, headers: { 'Content-Type': 'text/plain' } }
     }
 
     const items = parseNotificationCollection(await readJsonBody(req))
-    const userKey = params.get('u')
+    const userKey = /\/graph-notify\/([^/]+)/.exec(url.pathname)?.[1]
     if (!isUserKey(userKey)) return accepted()
     const expected = clientStateFor(sync.hookSecret, userKey)
     const listIds = new Set<string>()

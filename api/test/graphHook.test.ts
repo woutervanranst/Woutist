@@ -24,7 +24,7 @@ function notification(listId: string, clientState: string, changeType = 'updated
 }
 
 function notifyRequest(userKey: string, items: unknown[]) {
-  return makeRequest({ method: 'POST', url: `${PUBLIC_BASE_URL}/api/graph-notify?u=${userKey}`, body: { value: items } })
+  return makeRequest({ method: 'POST', url: `${PUBLIC_BASE_URL}/api/graph-notify/${userKey}/abc`, body: { value: items } })
 }
 
 describe('GET /api/graph-hook', () => {
@@ -32,10 +32,19 @@ describe('GET /api/graph-hook', () => {
     const { deps, issuer } = await createTestContext()
     const response = await handleGetGraphHook(makeRequest({ method: 'GET', token: await issuer.token() }), deps)
     expect(response.status).toBe(200)
-    expect(response.jsonBody).toEqual({
-      notificationUrl: `${PUBLIC_BASE_URL}/api/graph-notify?u=${KEY_A}`,
-      clientState: clientStateFor(KEY_A),
-    })
+    const body = response.jsonBody as { notificationUrl: string; clientState: string }
+    // No query string: Graph adds its own (?validationToken=) to this URL.
+    expect(body.notificationUrl).toMatch(new RegExp(`^${PUBLIC_BASE_URL}/api/graph-notify/${KEY_A}/[A-Za-z0-9_-]{8}$`))
+    expect(body.clientState).toBe(clientStateFor(KEY_A))
+  })
+
+  it('changes the notification URL when the secret changes, so devices replace old subscriptions', async () => {
+    const { deps, issuer } = await createTestContext()
+    const token = await issuer.token()
+    const before = (await handleGetGraphHook(makeRequest({ method: 'GET', token }), deps)).jsonBody as { notificationUrl: string }
+    const rotated = { ...deps, sync: { ...deps.sync!, hookSecret: 'another-secret-0123456789abcdefgh' } }
+    const after = (await handleGetGraphHook(makeRequest({ method: 'GET', token }), rotated)).jsonBody as { notificationUrl: string }
+    expect(after.notificationUrl).not.toBe(before.notificationUrl)
   })
 
   it('gives each user a different clientState', async () => {
@@ -60,7 +69,7 @@ describe('POST /api/graph-notify', () => {
   it("echoes Graph's validation token as text/plain", async () => {
     const { deps, realtime } = await createTestContext()
     const response = await handleGraphNotify(
-      makeRequest({ method: 'POST', url: `${PUBLIC_BASE_URL}/api/graph-notify?u=${KEY_A}&validationToken=Validation%3A%20abc+123` }),
+      makeRequest({ method: 'POST', url: `${PUBLIC_BASE_URL}/api/graph-notify/${KEY_A}/abc?validationToken=Validation%3A%20abc+123` }),
       deps,
     )
     expect(response).toEqual({ status: 200, body: 'Validation: abc 123', headers: { 'Content-Type': 'text/plain' } })
@@ -87,7 +96,7 @@ describe('POST /api/graph-notify', () => {
 
   it('ignores a malformed user key', async () => {
     const { deps, realtime } = await createTestContext()
-    const response = await handleGraphNotify(notifyRequest('not a key', [notification(LIST_1, clientStateFor('not a key'))]), deps)
+    const response = await handleGraphNotify(notifyRequest('not-a-key', [notification(LIST_1, clientStateFor('not-a-key'))]), deps)
     expect(response.status).toBe(202)
     expect(realtime.sent).toEqual([])
   })
@@ -102,7 +111,7 @@ describe('POST /api/graph-notify', () => {
   it('rejects a body that is not a notification collection', async () => {
     const { deps } = await createTestContext()
     const response = await handleGraphNotify(
-      makeRequest({ method: 'POST', url: `${PUBLIC_BASE_URL}/api/graph-notify?u=${KEY_A}`, body: { nope: true } }),
+      makeRequest({ method: 'POST', url: `${PUBLIC_BASE_URL}/api/graph-notify/${KEY_A}/abc`, body: { nope: true } }),
       deps,
     )
     expect(response.status).toBe(400)

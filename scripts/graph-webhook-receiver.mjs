@@ -25,7 +25,7 @@ const server = createServer((req, res) => {
   if (req.method === 'POST') {
     const validationToken = url.searchParams.get('validationToken')
     if (validationToken !== null) {
-      console.log(new Date().toISOString(), 'validation request answered')
+      console.log(new Date().toISOString(), 'validation request answered', url.search)
       res.writeHead(200, { 'Content-Type': 'text/plain' })
       return res.end(validationToken)
     }
@@ -40,7 +40,7 @@ const server = createServer((req, res) => {
         parsed = body
       }
       for (const item of parsed?.value ?? [parsed]) {
-        events.push({ receivedAt, path: url.pathname, ...item })
+        events.push({ receivedAt, path: url.pathname, query: url.search, ...item })
         console.log(receivedAt, item?.changeType ?? item?.lifecycleEvent ?? '?', item?.resource ?? '')
       }
       res.writeHead(202).end()

@@ -179,6 +179,16 @@ jobs:
           APP_VERSION: ${{ steps.version.outputs.name }}
       - run: npx cap sync android
         working-directory: web
+      - name: Firebase configuration (sync signals)
+        # Without it the APK builds fine, just without FCM sync signals (the app falls back to polling).
+        env:
+          FIREBASE_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$FIREBASE_GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$FIREBASE_GOOGLE_SERVICES_JSON" > web/android/app/google-services.json
+          else
+            echo "::warning::FIREBASE_GOOGLE_SERVICES_JSON is not set: this APK gets no sync signals."
+          fi
       - name: Build the signed APK
         working-directory: web/android
         env:
