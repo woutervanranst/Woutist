@@ -576,7 +576,7 @@ export class SyncEngine {
     await db.transaction('rw', db.categories, async () => {
       await db.categories.clear()
       await db.categories.bulkPut(
-        categories.map((c) => ({ displayName: c.displayName ?? '', color: c.color ?? 'none' })),
+        categories.map((c) => ({ id: c.id, displayName: c.displayName ?? '', color: c.color ?? 'none' })),
       )
     })
   }

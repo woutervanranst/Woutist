@@ -50,7 +50,7 @@ A new debug machine or a rotated release key means a new hash: add its redirect 
 |---|---|---|
 | Microsoft Graph | `Tasks.ReadWrite` | Read and write To Do lists, tasks, steps and attachments |
 | Microsoft Graph | `User.Read` | Profile and photo |
-| Microsoft Graph | `MailboxSettings.Read` | Outlook master categories (names and colors) |
+| Microsoft Graph | `MailboxSettings.ReadWrite` | Outlook master categories: read, and create, recolor, rename and delete from Settings (replaced `MailboxSettings.Read`; existing users see one new consent prompt) |
 | Microsoft Graph | `openid`, `profile`, `offline_access` | Sign-in and refresh tokens |
 | Woutist (this app) | `api://ef5e6e64-2019-41a7-8b29-35ef15b28c5f/Reminders.ReadWrite` | Calls to the Woutist reminder/push API |
 
@@ -77,6 +77,11 @@ az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$OBJ
 # Add another Graph delegated scope, e.g. Tasks.ReadWrite.Shared (c5ddf11b-c114-4886-8558-8a4e557cd52b)
 az ad app permission add --id $APPID --api 00000003-0000-0000-c000-000000000000 \
   --api-permissions c5ddf11b-c114-4886-8558-8a4e557cd52b=Scope
+
+# Category management needs MailboxSettings.ReadWrite (it replaced MailboxSettings.Read). Look the id up rather than trusting a doc:
+az ad sp show --id 00000003-0000-0000-c000-000000000000 \
+  --query "oauth2PermissionScopes[?value=='MailboxSettings.ReadWrite'].id" -o tsv
+# then: az ad app permission add --id $APPID --api 00000003-0000-0000-c000-000000000000 --api-permissions <id>=Scope
 
 # Inspect
 az ad app show --id $APPID --query "{aud:signInAudience,spa:spa.redirectUris,uris:identifierUris,scopes:api.oauth2PermissionScopes[].value}"

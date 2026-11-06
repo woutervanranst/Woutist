@@ -15,6 +15,8 @@ export interface AttachmentRecord {
 }
 
 export interface CategoryRecord {
+  /** Graph id, needed to recolor or delete. Absent only on rows cached before category editing existed. */
+  id?: string
   displayName: string
   color: string
 }

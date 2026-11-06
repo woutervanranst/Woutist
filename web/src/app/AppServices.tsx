@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo } from 'r
 import { useAuth } from '../auth/AuthContext'
 import { clearPrefs } from './prefs'
 import { deleteAccountDb, openAccountDb, type WoutistDb } from '../services/db'
+import { CategoryService } from '../services/categoryService'
 import { TodoRepository } from '../services/repository'
 import { SettingsSync } from '../services/settingsSync'
 import { SyncEngine } from '../services/sync/syncEngine'
@@ -19,6 +20,8 @@ export interface AppServices {
   svc: TaskService
   engine: SyncEngine
   repo: TodoRepository
+  /** Create, recolor, rename and delete Outlook categories. */
+  categories: CategoryService
   /** Saves the settings that follow the user (quick dates, reminder times) to their account. */
   settings: SettingsSync
   /** Null when the reminder push service isn't configured for this build. */
@@ -39,6 +42,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     const svc = new TaskService(auth.createGraphClient())
     const engine = new SyncEngine(db, svc)
     const repo = new TodoRepository(db, engine.requestFlush)
+    const categories = new CategoryService({ svc, engine, repo, db })
     const settings = new SettingsSync({ db, svc, engine, accountKey })
     // The Android app schedules reminders natively; Web Push is for browsers only.
     const push = pushEnabled && !isNative
@@ -51,7 +55,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
         })
       : null
     const native = isNative ? new NativeBridge({ db, engine }, accountKey) : null
-    return { accountKey, db, svc, engine, repo, settings, push, native }
+    return { accountKey, db, svc, engine, repo, categories, settings, push, native }
     // The Graph client only depends on the account.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountKey])

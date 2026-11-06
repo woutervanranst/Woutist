@@ -23,7 +23,7 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /** Delegated Microsoft Graph scopes; same as `web/src/auth/scopes.ts`. */
-val GRAPH_SCOPES = listOf("User.Read", "Tasks.ReadWrite", "MailboxSettings.Read")
+val GRAPH_SCOPES = listOf("User.Read", "Tasks.ReadWrite", "MailboxSettings.ReadWrite")
 
 /** The signed-in account. `key` matches the web app's per-account partition key format. */
 data class NativeAccount(val key: String, val name: String, val username: String)

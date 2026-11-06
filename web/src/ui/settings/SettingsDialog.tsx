@@ -21,6 +21,7 @@ import { useServices } from '../../app/AppServices'
 import type { ThemePref } from '../../app/prefs'
 import { SMART_LISTS } from '../../models/views'
 import { useAccountPrefs } from '../hooks'
+import { CategorySettings } from './CategorySettings'
 import { DateReminderSettings } from './DateReminderSettings'
 
 const useStyles = makeStyles({
@@ -75,6 +76,8 @@ export function SettingsDialog({ open, onClose, extra }: Props) {
                 />
               ))}
             </div>
+            <Divider />
+            <CategorySettings />
             <Divider />
             <div className={styles.section} style={{ marginTop: 16 }}>
               <Subtitle2>General</Subtitle2>

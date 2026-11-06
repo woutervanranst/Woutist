@@ -62,6 +62,11 @@ export class FakeGraph {
   requests: RecordedRequest[] = []
   pageSize = 1000
   categories = [{ id: 'C1', displayName: 'Red category', color: 'preset0' }]
+  /**
+   * What PATCH displayName does on a master category. Observed on a live account: 'ignored' (200, old name kept).
+   * Graph's docs say it's read-only ('refused' = 400); 'applied' covers the case where a rename works.
+   */
+  categoryRename: 'ignored' | 'refused' | 'applied' = 'ignored'
   private failures: Failure[] = []
 
   addList(displayName: string, extra: Partial<TodoTaskList> = {}): string {
@@ -367,6 +372,30 @@ export class FakeGraph {
         throw new NotFound()
       })),
       http.get(`${BASE}/me/outlook/masterCategories`, wrap('GET', ({ url }) => this.page(this.categories, url))),
+      http.post(`${BASE}/me/outlook/masterCategories`, wrap('POST', ({ body }) => {
+        const { displayName, color } = body as { displayName: string; color: string }
+        if (this.categories.some((c) => c.displayName.toLowerCase() === displayName.toLowerCase())) {
+          return HttpResponse.json({ error: { code: 'ErrorCategoryNameAlreadyExists', message: 'Exists' } }, { status: 409 })
+        }
+        const created = { id: nextId('C'), displayName, color }
+        this.categories.push(created)
+        return created
+      })),
+      http.patch(`${BASE}/me/outlook/masterCategories/:id`, wrap('PATCH', ({ params, body }) => {
+        const category = this.categories.find((c) => c.id === params.id)
+        if (!category) throw new NotFound()
+        const patch = body as { displayName?: string; color?: string }
+        if (patch.displayName !== undefined && this.categoryRename === 'refused') {
+          return HttpResponse.json({ error: { code: 'ErrorInvalidRequest', message: 'displayName is read-only' } }, { status: 400 })
+        }
+        if (patch.displayName !== undefined && this.categoryRename === 'ignored') delete patch.displayName
+        Object.assign(category, patch)
+        return category
+      })),
+      http.delete(`${BASE}/me/outlook/masterCategories/:id`, wrap('DELETE', ({ params }) => {
+        if (!this.categories.some((c) => c.id === params.id)) throw new NotFound()
+        this.categories = this.categories.filter((c) => c.id !== params.id)
+      })),
     ]
   }
 }

@@ -274,6 +274,20 @@ export class TaskService {
       return [] // mailbox not available for this account: categories still work as plain names
     }
   }
+
+  // The writes throw on purpose: Settings shows the error. Graph answers 409 for a duplicate name.
+  createCategory(displayName: string, color: string): Promise<OutlookCategory> {
+    return this.client.api('/me/outlook/masterCategories').post({ displayName, color })
+  }
+
+  /** `displayName` is documented as immutable on Graph; callers fall back to create + delete when it's refused. */
+  updateCategory(id: string, patch: { displayName?: string; color?: string }): Promise<OutlookCategory> {
+    return this.client.api(`/me/outlook/masterCategories/${enc(id)}`).patch(patch)
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    await this.client.api(`/me/outlook/masterCategories/${enc(id)}`).delete()
+  }
 }
 
 function splitDelta<T extends { id?: string }>(

@@ -471,7 +471,7 @@ function CategoriesCard({ task, onChange }: { task: Task; onChange: OnChange }) 
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
-            {all.length === 0 && <MenuItem disabled>No categories in your mailbox</MenuItem>}
+            {all.length === 0 && <MenuItem disabled>No categories yet. Add some in Settings</MenuItem>}
             {all.map((c) => (
               <MenuItemCheckbox
                 key={c.displayName}
