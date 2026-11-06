@@ -19,10 +19,22 @@ class WidgetContentTest {
     /** Same fixture as `widgetTasksMatchFixture` in `web/src/native/snapshot.test.ts`. */
     @Test fun matchesSharedFixture() {
         val expected = JSONObject(resource("widget-expected.json"))
+        // The fixture's "today", in Brussels (the snapshot was generated on 2026-11-05).
+        val today = LocalDate.parse("2026-11-05")
         for (key in expected.keys()) {
             val ids = expected.getJSONArray(key).let { a -> (0 until a.length()).map { a.getString(it) } }
-            assertEquals(key, ids, WidgetContent.tasks(fixture, WidgetSource.fromKey(key)).map { it.id })
+            // "done:<key>" lists the completed rows shown under the open ones.
+            val tasks = if (key.startsWith("done:")) {
+                WidgetContent.doneTasks(fixture, WidgetSource.fromKey(key.removePrefix("done:")), today)
+            } else {
+                WidgetContent.tasks(fixture, WidgetSource.fromKey(key), today)
+            }
+            assertEquals(key, ids, tasks.map { it.id })
         }
+    }
+
+    @Test fun doneTasksFromAnOldSnapshotAreHidden() {
+        assertEquals(emptyList<String>(), WidgetContent.doneTasks(fixture, WidgetSource.Smart("today"), LocalDate.parse("2026-11-06")))
     }
 
     @Test fun longTitlesAndEmojiNamesSurvive() {
@@ -33,6 +45,7 @@ class WidgetContentTest {
     }
 
     @Test fun titlesOfSmartLists() {
+        assertEquals("Today", WidgetContent.title(fixture, WidgetSource.Smart("today")))
         assertEquals("Important", WidgetContent.title(fixture, WidgetSource.Smart("important")))
         assertEquals("Planned", WidgetContent.title(fixture, WidgetSource.Smart("planned")))
     }
@@ -54,7 +67,7 @@ class WidgetContentTest {
     }
 
     @Test fun sourceRoundTripsThroughJson() {
-        for (source in listOf(WidgetSource.List("L1"), WidgetSource.Smart("important"), WidgetSource.Smart("planned"))) {
+        for (source in listOf(WidgetSource.List("L1"), WidgetSource.Smart("today"), WidgetSource.Smart("important"), WidgetSource.Smart("planned"))) {
             assertEquals(source, WidgetSource.parse(source.toJson()))
         }
         assertEquals(WidgetSource.List(""), WidgetSource.parse("not json"))
@@ -63,5 +76,6 @@ class WidgetContentTest {
     @Test fun appPathOpensTheView() {
         assertEquals("/lists/L%3D1", WidgetContent.path(WidgetSource.List("L=1")))
         assertEquals("/important", WidgetContent.path(WidgetSource.Smart("important")))
+        assertEquals("/today", WidgetContent.path(WidgetSource.Smart("today")))
     }
 }

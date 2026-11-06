@@ -10,7 +10,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
@@ -60,15 +62,47 @@ class GraphApi(
         )
     }
 
-    /** The account's lists and open tasks, read fresh from Graph (the background refresh). */
-    suspend fun fetchSnapshot(accountKey: String, zone: ZoneId, sort: Map<String, SortPref>): Snapshot {
+    /**
+     * The account's lists, open tasks and tasks completed today, read fresh from Graph (the background
+     * refresh). If Graph refuses the completed-tasks filter, [fallbackCompleted] (the previous snapshot's)
+     * is kept for what's still dated today.
+     */
+    suspend fun fetchSnapshot(
+        accountKey: String,
+        zone: ZoneId,
+        sort: Map<String, SortPref>,
+        fallbackCompleted: List<SnapTask> = emptyList(),
+        now: Instant = Instant.now(),
+    ): Snapshot {
         val lists = getAll(BASE.newBuilder().addPathSegments("me/todo/lists").build(), zone).map(GraphMapping::list)
         val tasks = lists.flatMap { list ->
             // $select can't include title (Graph answers 400), so full tasks are read and mapped.
             val url = tasksUrl(list.id).newBuilder().addQueryParameter("\$filter", "status ne 'completed'").build()
             getAll(url, zone).filter { it.optString("status") != "completed" }.map { GraphMapping.task(it, list.id, zone) }
         }
-        return Snapshot(1, accountKey, Instant.now().toString(), zone.id, lists, tasks, sort)
+        val today = LocalDate.ofInstant(now, zone).toString()
+        val completedToday = try {
+            lists.flatMap { completedSince(it.id, today, zone) }
+        } catch (e: GraphHttpException) {
+            if (e.status != 400) throw e
+            fallbackCompleted.filter { it.completedDate == today }
+        }
+        return Snapshot(1, accountKey, now.toString(), zone.id, lists, tasks, sort, completedToday = completedToday)
+    }
+
+    /**
+     * A list's tasks completed on [today]. Graph stores completion times in UTC, so the filter starts a day
+     * early (any zone's midnight is covered) and the local date is checked here.
+     */
+    private suspend fun completedSince(listId: String, today: String, zone: ZoneId): List<SnapTask> {
+        val from = WALL.format(LocalDate.parse(today).minusDays(1).atStartOfDay(zone).withZoneSameInstant(ZoneOffset.UTC))
+        val url = tasksUrl(listId).newBuilder()
+            .addQueryParameter("\$filter", "status eq 'completed' and completedDateTime/dateTime ge '$from'")
+            .build()
+        return getAll(url, zone)
+            .filter { it.optString("status") == "completed" }
+            .map { GraphMapping.task(it, listId, zone) }
+            .filter { it.completedDate == today }
     }
 
     /** Every item of a collection, following `@odata.nextLink` (only to Graph itself: it carries the token). */

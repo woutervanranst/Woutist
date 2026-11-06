@@ -28,6 +28,7 @@ class QuickAddTest {
     /** Planned starts with today (the phone's local date, passed in by the caller); the user can change it. */
     @Test fun plannedStartsDueToday() {
         assertEquals(today, QuickAdd.initialDue(WidgetSource.Smart("planned"), today))
+        assertEquals(today, QuickAdd.initialDue(WidgetSource.Smart("today"), today))
         assertNull(QuickAdd.initialDue(WidgetSource.List("L1"), today))
         val op = QuickAdd.create(s, WidgetSource.Smart("planned"), "Milk", null, today, null, "op1")!!
         assertEquals("L1" to "2026-11-05", op.listId to op.dueDate)

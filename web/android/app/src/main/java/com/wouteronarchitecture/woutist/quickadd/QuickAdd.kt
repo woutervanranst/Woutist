@@ -9,12 +9,12 @@ import java.time.LocalDate
 
 /** Where a quick-added task goes and what it gets, like adding in that view of the app. */
 object QuickAdd {
-    /** Planned starts due today (the phone's local date); the user can change or clear it. */
+    /** Today and Planned start due today (the phone's local date); the user can change or clear it. */
     fun initialDue(source: WidgetSource, today: LocalDate): LocalDate? =
-        today.takeIf { source is WidgetSource.Smart && source.id == "planned" }
+        today.takeIf { source is WidgetSource.Smart && (source.id == "planned" || source.id == "today") }
 
     /**
-     * A task for [source]'s list (Tasks for Important and Planned), starred from Important, with the
+     * A task for [source]'s list (Tasks for Today, Important and Planned), starred from Important, with the
      * chosen due date and reminder. Null for a blank title or when no list is known.
      */
     fun create(

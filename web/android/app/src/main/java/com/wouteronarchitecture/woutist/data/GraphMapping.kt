@@ -23,6 +23,7 @@ object GraphMapping {
         reminderAt = if (json.optBoolean("isReminderOn")) json.optJSONObject("reminderDateTime")?.let { instant(it).toString() } else null,
         createdDateTime = json.optString("createdDateTime"),
         recurring = json.optJSONObject("recurrence") != null,
+        completedDate = json.optJSONObject("completedDateTime")?.let { localDate(it, zone) },
     )
 
     /** A Graph `dateTimeTimeZone` as an instant. Unknown zones count as UTC, like the web app. */

@@ -36,7 +36,9 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val accountKey = runCatching { AuthManager.account()?.key }.getOrNull()
         val graph = GraphApi({ AuthManager.tokenSilent(GRAPH_SCOPES) })
         val zone = ZoneId.systemDefault()
-        val outcome = execute(store, accountKey) { key, sort -> graph.fetchSnapshot(key, zone, sort) }
+        val outcome = execute(store, accountKey) { key, sort ->
+            graph.fetchSnapshot(key, zone, sort, fallbackCompleted = store.current()?.completedToday.orEmpty())
+        }
         Log.i("Woutist", "Background refresh: $outcome")
         return if (outcome == RefreshOutcome.Retry) Result.retry() else Result.success()
     }

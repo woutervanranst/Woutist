@@ -9,13 +9,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.Clock
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The native side's view of the account: the last snapshot from the WebView app (the base) plus the
  * operations made on the phone that Graph hasn't confirmed yet. Persisted as files so alarms, the
  * widget and workers see it when the app isn't running. Every change calls [onChanged].
  */
-class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore) -> Unit = {}) {
+class SnapshotStore(
+    private val dir: File,
+    private val clock: Clock = Clock.systemUTC(),
+    private val onChanged: (SnapshotStore) -> Unit = {},
+) {
     private val lock = Any()
     private val changes = MutableStateFlow(0L)
 
@@ -58,15 +65,31 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
         saveFlags()
     }
 
-    /** The base with pending operations applied: completed tasks hidden, created tasks appended. */
+    /**
+     * The base with pending operations applied: completed tasks moved to [Snapshot.completedToday],
+     * created tasks appended.
+     */
     fun current(): Snapshot? = synchronized(lock) {
         val b = base ?: return null
         val completed = ops.filterIsInstance<PendingOp.Complete>().map { it.taskId }.toSet()
         val created = ops.filterIsInstance<PendingOp.Create>().map {
             SnapTask(it.tempTaskId, it.listId, it.title, it.important, it.dueDate, it.reminderAt, it.createdAt, false)
         }
-        b.copy(tasks = b.tasks.filter { it.id !in completed } + created)
+        b.completing(completed).let { it.copy(tasks = it.tasks + created) }
     }
+
+    /** [ids] taken out of the open tasks and listed as completed today (in the snapshot's zone). */
+    private fun Snapshot.completing(ids: Set<String>): Snapshot {
+        if (ids.isEmpty()) return this
+        val today = LocalDate.now(clock.withZone(zoneOf(timeZone))).toString()
+        val done = tasks.filter { it.id in ids }.map { it.copy(completedDate = today) }
+        return copy(
+            tasks = tasks.filter { it.id !in ids },
+            completedToday = completedToday.filter { it.id !in ids } + done,
+        )
+    }
+
+    private fun zoneOf(name: String): ZoneId = runCatching { ZoneId.of(name) }.getOrDefault(ZoneId.systemDefault())
 
     fun addPending(op: PendingOp) = mutate {
         ops = ops + op
@@ -75,8 +98,8 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
 
     /**
      * Forget an operation Graph has confirmed (or rejected for good). Its effect stays in the base until
-     * the next snapshot: a completed task stays hidden (a recurring one comes back with its next date in
-     * that snapshot), and a created task is shown as [created] when Graph returned it.
+     * the next snapshot: a completed task stays among today's completed ones (a recurring one comes back
+     * with its next date in that snapshot), and a created task is shown as [created] when Graph returned it.
      */
     fun removePending(opId: String, created: SnapTask? = null) = mutate {
         val op = ops.find { it.id == opId } ?: return@mutate
@@ -84,7 +107,7 @@ class SnapshotStore(private val dir: File, private val onChanged: (SnapshotStore
         savePending()
         val b = base ?: return@mutate
         base = when (op) {
-            is PendingOp.Complete -> b.copy(tasks = b.tasks.filter { it.id != op.taskId })
+            is PendingOp.Complete -> b.completing(setOf(op.taskId))
             is PendingOp.Create -> if (created != null) b.copy(tasks = b.tasks + created) else b
         }
         saveBase()

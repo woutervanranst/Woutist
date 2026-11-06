@@ -44,6 +44,7 @@ import androidx.glance.layout.width
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextDecoration
 import androidx.glance.text.TextStyle
 import com.wouteronarchitecture.woutist.MainActivity
 import com.wouteronarchitecture.woutist.R
@@ -53,6 +54,7 @@ import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.quickadd.QuickAddActivity
 import com.wouteronarchitecture.woutist.reminders.Notifications
+import com.wouteronarchitecture.woutist.work.RefreshWorker
 import com.wouteronarchitecture.woutist.work.TaskOpWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +73,7 @@ private object WidgetColors {
     val overdue = ColorProvider(day = Color(0xFFC50F1F), night = Color(0xFFF1707B))
 }
 
-/** A home-screen list of open tasks: a list, Important or Planned, picked per widget. */
+/** A home-screen list of open tasks: a list, Today, Important or Planned, picked per widget. */
 class TaskListWidget : GlanceAppWidget() {
     override val stateDefinition = PreferencesGlanceStateDefinition
 
@@ -115,6 +117,13 @@ private fun WidgetBody(context: Context, snapshot: Snapshot?, source: WidgetSour
             )
             if (snapshot != null) {
                 Image(
+                    provider = ImageProvider(R.drawable.ic_widget_refresh),
+                    contentDescription = "Refresh",
+                    colorFilter = ColorFilter.tint(WidgetColors.brand),
+                    modifier = GlanceModifier.size(28.dp).padding(4.dp).clickable(actionRunCallback<RefreshAction>()),
+                )
+                Spacer(GlanceModifier.width(4.dp))
+                Image(
                     provider = ImageProvider(R.drawable.ic_widget_add),
                     contentDescription = "Add a task",
                     colorFilter = ColorFilter.tint(WidgetColors.brand),
@@ -131,14 +140,20 @@ private fun WidgetBody(context: Context, snapshot: Snapshot?, source: WidgetSour
         when {
             snapshot == null -> Message(context, "Open Woutist to sign in")
             else -> {
-                val tasks = WidgetContent.tasks(snapshot, source)
-                if (tasks.isEmpty()) {
+                val today = WidgetContent.todayIn(snapshot)
+                val tasks = WidgetContent.tasks(snapshot, source, today)
+                // Today also lists what was completed today, below the open tasks.
+                val done = WidgetContent.doneTasks(snapshot, source, today)
+                if (tasks.isEmpty() && done.isEmpty()) {
                     Message(context, "No tasks", WidgetContent.path(source))
                 } else {
-                    val today = LocalDate.now()
                     LazyColumn {
                         items(tasks, itemId = { it.id.hashCode().toLong() }) { task ->
                             TaskRow(context, snapshot, source, task, today)
+                        }
+                        // Item ids distinct from the open rows' ids.
+                        items(done, itemId = { ("done:" + it.id).hashCode().toLong() }) { task ->
+                            TaskRow(context, snapshot, source, task, today, completed = true)
                         }
                     }
                 }
@@ -158,8 +173,16 @@ private fun Message(context: Context, text: String, path: String = "/") {
 }
 
 @Composable
-private fun TaskRow(context: Context, snapshot: Snapshot, source: WidgetSource, task: SnapTask, today: LocalDate) {
-    val due = WidgetContent.dueLabel(task, today)
+private fun TaskRow(
+    context: Context,
+    snapshot: Snapshot,
+    source: WidgetSource,
+    task: SnapTask,
+    today: LocalDate,
+    completed: Boolean = false,
+) {
+    // A completed task's due date no longer matters.
+    val due = if (completed) null else WidgetContent.dueLabel(task, today)
     // Smart lists say which list a task is in, like the app.
     val listName = if (source is WidgetSource.Smart) WidgetContent.listName(snapshot, task.listId).ifEmpty { null } else null
     val subtitle = listOfNotNull(listName, due).joinToString(" · ").ifEmpty { null }
@@ -171,22 +194,39 @@ private fun TaskRow(context: Context, snapshot: Snapshot, source: WidgetSource, 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val pending = task.id.startsWith(PendingOp.NATIVE_TMP_PREFIX)
-            Image(
-                provider = ImageProvider(R.drawable.ic_widget_circle),
-                contentDescription = "Complete ${task.title}",
-                colorFilter = ColorFilter.tint(WidgetColors.secondary),
-                modifier = GlanceModifier.size(20.dp).let {
-                    // A task still being created has no Graph id to complete yet.
-                    if (pending) it else it.clickable(
-                        actionRunCallback<CompleteTaskAction>(
-                            actionParametersOf(CompleteTaskAction.TASK_ID to task.id, CompleteTaskAction.LIST_ID to task.listId),
-                        ),
-                    )
-                },
-            )
+            if (completed) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_widget_check),
+                    contentDescription = "Completed",
+                    colorFilter = ColorFilter.tint(WidgetColors.brand),
+                    modifier = GlanceModifier.size(20.dp),
+                )
+            } else {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_widget_circle),
+                    contentDescription = "Complete ${task.title}",
+                    colorFilter = ColorFilter.tint(WidgetColors.secondary),
+                    modifier = GlanceModifier.size(20.dp).let {
+                        // A task still being created has no Graph id to complete yet.
+                        if (pending) it else it.clickable(
+                            actionRunCallback<CompleteTaskAction>(
+                                actionParametersOf(CompleteTaskAction.TASK_ID to task.id, CompleteTaskAction.LIST_ID to task.listId),
+                            ),
+                        )
+                    },
+                )
+            }
             Spacer(GlanceModifier.width(8.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
-                Text(task.title, maxLines = 2, style = TextStyle(color = WidgetColors.text, fontSize = 14.sp))
+                Text(
+                    task.title,
+                    maxLines = 2,
+                    style = if (completed) {
+                        TextStyle(color = WidgetColors.secondary, fontSize = 14.sp, textDecoration = TextDecoration.LineThrough)
+                    } else {
+                        TextStyle(color = WidgetColors.text, fontSize = 14.sp)
+                    },
+                )
                 if (subtitle != null) {
                     Text(
                         subtitle,
@@ -229,5 +269,12 @@ class CompleteTaskAction : ActionCallback {
     companion object {
         val TASK_ID = ActionParameters.Key<String>("taskId")
         val LIST_ID = ActionParameters.Key<String>("listId")
+    }
+}
+
+/** The widget's refresh arrow: read Graph now instead of waiting for the next background refresh. */
+class RefreshAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        RefreshWorker.refreshSoon(context)
     }
 }
