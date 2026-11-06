@@ -1,9 +1,12 @@
 // Production wiring: builds dependencies from app settings once per worker process.
-import type { HandlerDeps } from '../handlers/api'
+import { DefaultAzureCredential } from '@azure/identity'
+import type { HandlerDeps, SyncConfig } from '../handlers/api'
 import { createAuthenticator, type Authenticator } from './auth'
+import { createFcmSender, parseServiceAccount } from './fcm'
 import { errorResponse, type ApiResponse } from './http'
 import { contextLogger, type Logger } from './logger'
 import { createWebPushSender, type PushSender } from './push'
+import { createWebPubSubChannel } from './realtime'
 import { createAzureStore, type Store } from './tables'
 
 type Env = Record<string, string | undefined>
@@ -11,6 +14,46 @@ type Env = Record<string, string | undefined>
 let authenticator: Authenticator | undefined
 let store: Store | undefined
 let pushSender: PushSender | undefined
+/** `null`: sync signals are not configured. */
+let syncConfig: SyncConfig | null | undefined
+
+/** Long enough that the per-user clientState can't be guessed. */
+const MIN_HOOK_SECRET_LENGTH = 32
+
+/**
+ * Sync signals need `GRAPH_HOOK_SECRET` and `PUBLIC_API_BASE_URL`. Web PubSub (`WEBPUBSUB_ENDPOINT` or
+ * `WEBPUBSUB_CONNECTION_STRING`, optional `WEBPUBSUB_HUB`) and FCM (`FCM_SERVICE_ACCOUNT`, the key file's
+ * JSON) are each optional. Throws when a setting is present but invalid.
+ */
+export function getSyncConfig(env: Env = process.env): SyncConfig | undefined {
+  if (syncConfig === undefined) {
+    const hookSecret = env['GRAPH_HOOK_SECRET']?.trim()
+    const publicBaseUrl = env['PUBLIC_API_BASE_URL']?.trim()
+    if (!hookSecret || !publicBaseUrl) {
+      syncConfig = null
+    } else {
+      if (hookSecret.length < MIN_HOOK_SECRET_LENGTH) {
+        throw new Error(`GRAPH_HOOK_SECRET must be at least ${MIN_HOOK_SECRET_LENGTH} characters.`)
+      }
+      if (new URL(publicBaseUrl).protocol !== 'https:') throw new Error('PUBLIC_API_BASE_URL must be an https URL.')
+      const hub = env['WEBPUBSUB_HUB']?.trim() || 'sync'
+      const connectionString = env['WEBPUBSUB_CONNECTION_STRING']?.trim()
+      const endpoint = env['WEBPUBSUB_ENDPOINT']?.trim()
+      const fcmAccount = env['FCM_SERVICE_ACCOUNT']?.trim()
+      syncConfig = {
+        hookSecret,
+        publicBaseUrl,
+        realtime: connectionString
+          ? createWebPubSubChannel({ connectionString, hub })
+          : endpoint
+            ? createWebPubSubChannel({ endpoint, hub, credential: new DefaultAzureCredential() })
+            : undefined,
+        fcm: fcmAccount ? createFcmSender(parseServiceAccount(fcmAccount)) : undefined,
+      }
+    }
+  }
+  return syncConfig ?? undefined
+}
 
 export function getStore(env: Env = process.env): Store {
   store ??= createAzureStore({
@@ -56,6 +99,12 @@ export async function runHttp(
   } catch (err) {
     log.error('The API is misconfigured', err)
     return errorResponse(500, 'server_misconfigured', 'The service is not configured correctly.')
+  }
+  try {
+    deps.sync = getSyncConfig()
+  } catch (err) {
+    // Reminders keep working; the sync endpoints answer 503 until the settings are fixed.
+    log.error('Sync signals are misconfigured', err)
   }
   return handler(deps)
 }

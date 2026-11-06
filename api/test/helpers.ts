@@ -7,6 +7,9 @@ import type { ApiRequest } from '../src/lib/http'
 import type { Logger } from '../src/lib/logger'
 import { createMemoryStore, type MemoryStore } from '../src/lib/memoryStore'
 import type { PushOutcome, PushSender } from '../src/lib/push'
+import type { FcmSender } from '../src/lib/fcm'
+import type { RealtimeChannel } from '../src/lib/realtime'
+import type { SyncSignal } from '@woutist/contracts'
 import type { SubscriptionInput } from '../src/lib/validation'
 
 export const CLIENT_ID = '0f1e2d3c-4b5a-4968-8776-655443322110'
@@ -61,6 +64,7 @@ export async function createTestIssuer(): Promise<TestIssuer> {
 }
 
 export interface RequestOptions {
+  url?: string
   token?: string | undefined
   body?: unknown
   rawBody?: string
@@ -75,6 +79,7 @@ export function makeRequest(options: RequestOptions = {}): ApiRequest {
   const text = options.rawBody ?? (options.body === undefined ? '' : JSON.stringify(options.body))
   return {
     method: options.method ?? 'PUT',
+    url: options.url ?? 'https://api.test/api/x',
     headers: { get: (name) => headers.get(name.toLowerCase()) ?? null },
     text: async () => text,
   }
@@ -111,11 +116,16 @@ export class TestClock {
   }
 }
 
+export const HOOK_SECRET = 'test-hook-secret-0123456789abcdef'
+export const PUBLIC_BASE_URL = 'https://api.test'
+
 export interface TestContext {
   store: MemoryStore
   issuer: TestIssuer
   clock: TestClock
   log: RecordingLogger
+  realtime: FakeRealtime
+  fcm: FakeFcm
   deps: HandlerDeps
 }
 
@@ -124,7 +134,57 @@ export async function createTestContext(nowIso = '2026-11-05T10:00:00.000Z'): Pr
   const issuer = await createTestIssuer()
   const clock = new TestClock(nowIso)
   const log = recordingLogger()
-  return { store, issuer, clock, log, deps: { authenticate: issuer.authenticator(), store, now: clock.now, log } }
+  const realtime = fakeRealtime()
+  const fcm = fakeFcm()
+  return {
+    store,
+    issuer,
+    clock,
+    log,
+    realtime,
+    fcm,
+    deps: {
+      authenticate: issuer.authenticator(),
+      store,
+      now: clock.now,
+      log,
+      sync: { hookSecret: HOOK_SECRET, publicBaseUrl: PUBLIC_BASE_URL, realtime, fcm: fcm.send },
+    },
+  }
+}
+
+export interface FakeRealtime extends RealtimeChannel {
+  sent: { userKey: string; signal: SyncSignal }[]
+}
+
+export function fakeRealtime(): FakeRealtime {
+  const sent: { userKey: string; signal: SyncSignal }[] = []
+  return {
+    sent,
+    send: async (userKey, signal) => {
+      sent.push({ userKey, signal })
+    },
+    clientUrl: async (userKey) => `wss://pubsub.test/client/hubs/sync?user=${userKey}`,
+  }
+}
+
+export interface FakeFcm {
+  send: FcmSender
+  calls: { token: string; signal: SyncSignal }[]
+  responses: Map<string, PushOutcome>
+}
+
+export function fakeFcm(): FakeFcm {
+  const calls: { token: string; signal: SyncSignal }[] = []
+  const responses = new Map<string, PushOutcome>()
+  return {
+    calls,
+    responses,
+    send: async (token, signal) => {
+      calls.push({ token, signal })
+      return responses.get(token) ?? { ok: true, statusCode: 200 }
+    },
+  }
 }
 
 export function makeSubscription(endpoint = `https://fcm.googleapis.com/fcm/send/${randomBytes(8).toString('hex')}`): SubscriptionInput {

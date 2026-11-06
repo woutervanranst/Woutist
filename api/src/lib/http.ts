@@ -7,6 +7,8 @@ export const MAX_BODY_BYTES = 512 * 1024
 
 export interface ApiRequest {
   readonly method?: string
+  /** Absolute request URL (the Functions host always sets it). */
+  readonly url?: string
   readonly headers: { get(name: string): string | null }
   text(): Promise<string>
 }
@@ -14,6 +16,8 @@ export interface ApiRequest {
 export interface ApiResponse {
   status: number
   jsonBody?: unknown
+  /** Plain-text body, e.g. the validation token Graph expects back. */
+  body?: string
   headers?: Record<string, string>
 }
 
@@ -35,6 +39,10 @@ export class HttpError extends Error {
 export function errorResponse(status: number, error: string, message: string, headers?: Record<string, string>): ApiResponse {
   const body: ApiErrorBody = { error, message }
   return headers ? { status, jsonBody: body, headers } : { status, jsonBody: body }
+}
+
+export function accepted(): ApiResponse {
+  return { status: 202 }
 }
 
 export function noContent(): ApiResponse {

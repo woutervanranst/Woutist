@@ -104,3 +104,54 @@ export function parseReminder(value: unknown): ReminderInput | undefined {
   if (!Number.isFinite(fireAtMs)) return undefined
   return { taskId, listId, fireAt: new Date(fireAtMs).toISOString(), fireAtMs }
 }
+
+/** FCM registration tokens are ~160 URL-safe characters (plus `:`); this leaves plenty of headroom. */
+export const MAX_DEVICE_TOKEN_LENGTH = 4096
+const DEVICE_TOKEN_RE = /^[A-Za-z0-9:_-]+$/
+
+export function parseDeviceRequest(body: unknown): string {
+  const token = isRecord(body) ? body['token'] : undefined
+  if (typeof token !== 'string' || token.length > MAX_DEVICE_TOKEN_LENGTH || !DEVICE_TOKEN_RE.test(token)) {
+    throw badRequest('Expected { token } with an FCM registration token.')
+  }
+  return token
+}
+
+/** `${tid}_${oid}`, as {@link AuthenticatedUser.userKey} builds it. */
+const USER_KEY_RE = /^[0-9a-f-]{36}_[0-9a-f-]{36}$/
+
+export function isUserKey(value: unknown): value is string {
+  return typeof value === 'string' && USER_KEY_RE.test(value)
+}
+
+export interface GraphNotification {
+  clientState: unknown
+  resource: unknown
+}
+
+/** A Graph change notification collection: `{ value: [...] }`. Items are checked one by one later. */
+export function parseNotificationCollection(body: unknown): GraphNotification[] {
+  if (!isRecord(body) || !Array.isArray(body['value'])) {
+    throw badRequest('Expected a change notification collection { value: [...] }.')
+  }
+  return body['value'].filter(isRecord).map((item) => ({ clientState: item['clientState'], resource: item['resource'] }))
+}
+
+/**
+ * The list id in a todoTask notification's `resource`. Graph sends
+ * `todob2/graph/v1/users('<email>')/todoApp/lists('<id>')/tasks` (id not URL-encoded); the documented
+ * `/me/todo/lists/<id>/tasks` form is accepted too.
+ */
+export function listIdOfResource(resource: unknown): string | undefined {
+  if (typeof resource !== 'string') return undefined
+  const quoted = /\/lists\('([^']+)'\)/.exec(resource)?.[1]
+  if (quoted) return isId(quoted) ? quoted : undefined
+  const path = /\/lists\/([^/]+)\/tasks/.exec(resource)?.[1]
+  if (!path) return undefined
+  try {
+    const id = decodeURIComponent(path)
+    return isId(id) ? id : undefined
+  } catch {
+    return undefined
+  }
+}

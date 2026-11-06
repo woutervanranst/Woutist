@@ -1,6 +1,7 @@
 // In-memory implementation of the table repository (tests, local experiments).
 import type {
   BaseEntity,
+  DeviceEntity,
   EntityTable,
   ReminderEntity,
   ScheduleEntity,
@@ -62,6 +63,7 @@ export interface MemoryStore extends Store {
   reminders: MemoryEntityTable<ReminderEntity>
   schedule: MemoryEntityTable<ScheduleEntity>
   state: MemoryEntityTable<StateEntity>
+  devices: MemoryEntityTable<DeviceEntity>
 }
 
 export function createMemoryStore(): MemoryStore {
@@ -70,5 +72,6 @@ export function createMemoryStore(): MemoryStore {
     reminders: new MemoryEntityTable(),
     schedule: new MemoryEntityTable(),
     state: new MemoryEntityTable(),
+    devices: new MemoryEntityTable(),
   }
 }

@@ -9,7 +9,12 @@
     "VAPID_PUBLIC_KEY": "<generate with: npx web-push generate-vapid-keys>",
     "VAPID_PRIVATE_KEY": "<never commit this>",
     "VAPID_SUBJECT": "mailto:you@example.com",
-    "ALLOWED_USERS": ""
+    "ALLOWED_USERS": "",
+    "GRAPH_HOOK_SECRET": "<32+ random characters, e.g. openssl rand -base64 48>",
+    "PUBLIC_API_BASE_URL": "<public https URL of this API, e.g. a cloudflared tunnel to :7071>",
+    "WEBPUBSUB_CONNECTION_STRING": "<optional: Web PubSub connection string for local runs>",
+    "WEBPUBSUB_HUB": "sync",
+    "FCM_SERVICE_ACCOUNT": "<optional: Firebase service account key JSON, on one line>"
   },
   "Host": {
     "CORS": "http://localhost:5173",

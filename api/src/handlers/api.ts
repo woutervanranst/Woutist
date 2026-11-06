@@ -2,7 +2,9 @@
 import type { PutRemindersResponse } from '@woutist/contracts'
 import { requireUser, type Authenticator } from '../lib/auth'
 import { handleErrors, noContent, okJson, readJsonBody, type ApiRequest, type ApiResponse } from '../lib/http'
+import type { FcmSender } from '../lib/fcm'
 import type { Logger } from '../lib/logger'
+import type { RealtimeChannel } from '../lib/realtime'
 import type { Store } from '../lib/tables'
 import {
   parseDeleteSubscriptionRequest,
@@ -13,11 +15,24 @@ import { deleteUserData } from '../services/account'
 import { reconcileReminders } from '../services/reminders'
 import { deleteSubscription, upsertSubscription } from '../services/subscriptions'
 
+/** Near-instant sync: absent until `GRAPH_HOOK_SECRET` and `PUBLIC_API_BASE_URL` are configured. */
+export interface SyncConfig {
+  /** Key for the HMAC that makes each user's Graph `clientState`. */
+  hookSecret: string
+  /** Public origin of this API, e.g. `https://api.example.com`; Graph posts notifications there. */
+  publicBaseUrl: string
+  /** Open web tabs; absent without Web PubSub settings. */
+  realtime?: RealtimeChannel | undefined
+  /** Android devices; absent without an FCM service account. */
+  fcm?: FcmSender | undefined
+}
+
 export interface HandlerDeps {
   authenticate: Authenticator
   store: Store
   now: () => Date
   log: Logger
+  sync?: SyncConfig | undefined
 }
 
 /** PUT /api/subscription */
