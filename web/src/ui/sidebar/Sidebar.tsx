@@ -29,6 +29,8 @@ const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
+    // Fill the container: inside a flex drawer (align-items: flex-start) it would shrink to its content.
+    width: '100%',
     height: '100%',
     minHeight: 0,
     minWidth: 0,
