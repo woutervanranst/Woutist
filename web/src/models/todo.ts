@@ -10,6 +10,7 @@ import {
   graphToLocalDate,
   instantToGraph,
   localDateToGraph,
+  todayLocal,
   userTimeZone,
 } from './time'
 
@@ -196,7 +197,8 @@ export function applyChanges(task: Task, changes: TaskChanges): Task {
   if (changes.status !== undefined) {
     next.completed = changes.status === 'completed' ? 1 : 0
     if (changes.status === 'completed' && !task.completedDate) {
-      next.completedDate = new Date().toISOString().slice(0, 10)
+      // The user's calendar date, like Graph's completedDateTime read back in their zone.
+      next.completedDate = todayLocal()
     }
     if (changes.status !== 'completed') next.completedDate = null
   }
