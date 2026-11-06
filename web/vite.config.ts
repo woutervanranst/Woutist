@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
+// CI sets APP_VERSION (e.g. from the release tag); package.json is only the fallback for local builds.
+const appVersion = process.env.APP_VERSION || pkg.version
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -45,7 +47,7 @@ export default defineConfig({
     }),
   ],
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
     rolldownOptions: {

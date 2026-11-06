@@ -26,12 +26,12 @@ gh api -X PATCH "repos/$FULL" \
   -f 'security_and_analysis[secret_scanning][status]=enabled' \
   -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled' >/dev/null
 
-echo "==> 'production' environment (deployments from main only)"
+echo "==> 'production' environment (deployments from v* release tags only)"
 gh api -X PUT "repos/$FULL/environments/production" --input - >/dev/null <<'JSON'
 { "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true } }
 JSON
 gh api -X POST "repos/$FULL/environments/production/deployment-branch-policies" \
-  -f name=main -f type=branch >/dev/null 2>&1 || true
+  -f name='v*' -f type=tag >/dev/null 2>&1 || true
 
 echo "==> Deploy identity $IDENTITY with federated credential for environment:production"
 az identity create -g "$RG" -n "$IDENTITY" -l westeurope -o none
