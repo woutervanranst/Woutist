@@ -1,5 +1,5 @@
 /** Outlook category color presets (preset0 … preset24). */
-const PRESETS: Record<string, string> = {
+export const PRESETS: Record<string, string> = {
   preset0: '#e74856',
   preset1: '#f7630c',
   preset2: '#a0522d',
@@ -26,6 +26,9 @@ const PRESETS: Record<string, string> = {
   preset23: '#5c2e91',
   preset24: '#881798',
 }
+
+/** Preset keys in Outlook's order, for the color picker. */
+export const PRESET_KEYS = Object.keys(PRESETS)
 
 export function categoryColor(color: string | undefined): string {
   return (color && PRESETS[color]) || '#8a8886'

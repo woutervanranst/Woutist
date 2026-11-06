@@ -44,6 +44,7 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
    - Tasks use **delta queries** per list. Changed tasks are re-read with `$expand=checklistItems,linkedResources`, because delta doesn't include steps.
    - A full refresh runs on first sync and every 6 hours.
    - **Server data never overwrites an entity with unsynced local changes.**
+   - **Categories** are the one exception to the outbox: Settings > Categories (`CategoryService`) writes Outlook master categories straight to Graph, online only, so a failure shows in the dialog. Tasks hold category names as plain strings, so renaming or deleting a category also rewrites the tasks that carry it, and those edits do go through the outbox. Graph won't rename a category: `PATCH displayName` answers success but keeps the old name. So a rename sends the PATCH, trusts it only if the returned name matches, and otherwise creates the new category, re-tags the tasks and deletes the old one. Needs `MailboxSettings.ReadWrite`.
 5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change.
 
 ### Dates and reminders

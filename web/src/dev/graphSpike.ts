@@ -105,6 +105,34 @@ export async function runGraphSpike() {
     // 6. Categories and profile photo.
     const cats = await call('GET', '/me/outlook/masterCategories')
     report.masterCategories = { status: cats.status, count: cats.json?.value?.length, error: cats.json?.error?.code }
+    // 6b. Category writes (needs MailboxSettings.ReadWrite): is displayName really read-only? Does To Do cascade a rename?
+    const catName = `Woutist spike ${Date.now()}`
+    const catCreate = await call('POST', '/me/outlook/masterCategories', { displayName: catName, color: 'preset7' })
+    const catId = catCreate.json?.id
+    if (catId) {
+      const C = `/me/outlook/masterCategories/${encodeURIComponent(catId)}`
+      const taggedTask = await call('POST', `${L}/tasks`, { title: 'category spike', categories: [catName] })
+      const recolor = await call('PATCH', C, { color: 'preset4' })
+      const rename = await call('PATCH', C, { displayName: `${catName} renamed` })
+      const afterRename = await call('GET', `${L}/tasks/${encodeURIComponent(taggedTask.json?.id)}`)
+      const duplicate = await call('POST', '/me/outlook/masterCategories', { displayName: catName.toUpperCase(), color: 'preset7' })
+      const remove = await call('DELETE', C)
+      const afterDelete = await call('GET', `${L}/tasks/${encodeURIComponent(taggedTask.json?.id)}`)
+      report.categoryWrites = {
+        create: catCreate.status,
+        recolor: recolor.status,
+        renameStatus: rename.status,
+        renameError: rename.json?.error?.code,
+        renameReturnedName: rename.json?.displayName,
+        nameAfterRename: (await call('GET', C)).json?.displayName,
+        taskCategoriesAfterRename: afterRename.json?.categories,
+        duplicateStatus: duplicate.status,
+        deleteStatus: remove.status,
+        taskCategoriesAfterDelete: afterDelete.json?.categories,
+      }
+    } else {
+      report.categoryWrites = { create: catCreate.status, error: catCreate.json?.error?.code }
+    }
     const photo = await fetch(`${BASE}/me/photo/$value`, { headers: { Authorization: `Bearer ${await getGraphToken()}` } })
     report.photoStatus = photo.status
 

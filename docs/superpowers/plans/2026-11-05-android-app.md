@@ -23,7 +23,7 @@
 - **Graph compatibility:** write only native To Do fields. Snooze is local only and is never written to Graph.
 - **Public repo, no secrets in git:** no keystores, passwords, `local.properties` or tokens. Keystore files (`*.jks`, `*.keystore`) are gitignored.
 - **Entra app** client id `ef5e6e64-2019-41a7-8b29-35ef15b28c5f`, object id `cf4db39a-6705-4783-a59a-27e7b9d5aa39`, authority `https://login.microsoftonline.com/common`, audience `AzureADandPersonalMicrosoftAccount`.
-- **Graph scopes:** `User.Read`, `Tasks.ReadWrite`, `MailboxSettings.Read` (same as `web/src/auth/scopes.ts`). The native app doesn't call the Woutist reminder API.
+- **Graph scopes:** `User.Read`, `Tasks.ReadWrite`, `MailboxSettings.ReadWrite` (same as `web/src/auth/scopes.ts`). The native app doesn't call the Woutist reminder API.
 - **Personal Microsoft accounts must work.** Work accounts are best-effort; no Intune MAM SDK.
 - **Reminder rules are the same as `web/src/services/push/reminders.ts`:**
   - only open tasks with the reminder on and a non-temporary id

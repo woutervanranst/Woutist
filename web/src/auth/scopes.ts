@@ -2,7 +2,7 @@ import { API_SCOPE_NAME } from '@woutist/contracts'
 import { config } from '../config'
 
 /** Delegated Microsoft Graph scopes Woutist needs. */
-export const GRAPH_SCOPES = ['User.Read', 'Tasks.ReadWrite', 'MailboxSettings.Read']
+export const GRAPH_SCOPES = ['User.Read', 'Tasks.ReadWrite', 'MailboxSettings.ReadWrite']
 
 /** Scope for Woutist's own reminder push API (exposed by the same app registration). */
 export const API_SCOPES = [`api://${config.clientId}/${API_SCOPE_NAME}`]
