@@ -141,7 +141,7 @@ export function TaskListView({ view }: Props) {
   const { open, completed } = useMemo(() => {
     const result = tasksForView(view, tasks ?? [], today)
     return {
-      open: sortTasks(result.open, { key: sortKey, dir: sortDir }),
+      open: sortTasks(result.open, { key: sortKey, dir: sortDir }, today),
       completed: [...result.completed].sort((a, b) =>
         (b.completedDate ?? '').localeCompare(a.completedDate ?? ''),
       ),

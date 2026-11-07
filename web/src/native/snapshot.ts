@@ -131,6 +131,7 @@ export function widgetTasks(s: NativeSnapshot, source: WidgetSource, today: stri
         importance: task.important ? ('high' as const) : ('normal' as const),
       })),
       s.sort[key] ?? DEFAULT_SORT,
+      today,
     ).map((w) => w.task)
   if (source.kind === 'list') {
     const known = s.lists.some((l) => l.id === source.listId)

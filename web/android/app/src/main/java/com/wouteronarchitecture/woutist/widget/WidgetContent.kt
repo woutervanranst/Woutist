@@ -43,9 +43,9 @@ object WidgetContent {
 
     /** The open tasks. Today is Planned up to [today]: due or overdue. */
     fun tasks(s: Snapshot, source: WidgetSource, today: LocalDate = todayIn(s)): List<SnapTask> = when (val resolved = resolve(s, source)) {
-        is WidgetSource.List -> sorted(s.tasks.filter { it.listId == resolved.listId }, s.sort["list:${resolved.listId}"])
+        is WidgetSource.List -> sorted(s.tasks.filter { it.listId == resolved.listId }, s.sort["list:${resolved.listId}"], today)
         is WidgetSource.Smart -> when (resolved.id) {
-            "important" -> sorted(s.tasks.filter { it.important }, s.sort["smart:important"])
+            "important" -> sorted(s.tasks.filter { it.important }, s.sort["smart:important"], today)
             else -> {
                 val zone = zoneOf(s)
                 val until = today.toString()
@@ -117,7 +117,7 @@ object WidgetContent {
     private val byReminder: Comparator<SnapTask> = compareBy<SnapTask, String?>(nullsLast()) { it.reminderAt }
 
     /** `sortTasks` from `web/src/models/views.ts`; ties go newest first. The default is due date, then reminder. */
-    private fun sorted(tasks: List<SnapTask>, pref: SortPref?): List<SnapTask> {
+    private fun sorted(tasks: List<SnapTask>, pref: SortPref?, today: LocalDate): List<SnapTask> {
         val p = pref ?: DEFAULT_SORT
         val dir = if (p.dir == "asc") 1 else -1
         val titles = Collator.getInstance().apply { strength = Collator.PRIMARY }
@@ -133,8 +133,10 @@ object WidgetContent {
                     else -> dir * a.dueDate.compareTo(b.dueDate)
                 }
             }
-            // Due date (undated last), then reminder time; ties go newest first below.
-            else -> compareBy<SnapTask, String?>(nullsLast()) { it.dueDate }.then(byReminder)
+            // Due date (undated last), then reminder time; ties go newest first below. A reminder without
+            // a due date counts as due today.
+            else -> compareBy<SnapTask, String?>(nullsLast()) { it.dueDate ?: if (it.reminderAt != null) today.toString() else null }
+                .then(byReminder)
         }
         return tasks.sortedWith(primary.then(byCreatedDesc))
     }

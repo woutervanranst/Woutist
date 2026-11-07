@@ -198,6 +198,21 @@ describe('limitGroups', () => {
     ])
   })
 
+  it('counts a reminder without a due date as due today, by default', () => {
+    const list = [
+      task('tomorrow', { dueDate: '2026-11-06' }),
+      task('reminder only', { reminderAt: '2026-11-05T08:00:00Z', isReminderOn: true }),
+      task('nothing'),
+      task('yesterday', { dueDate: '2026-11-04' }),
+      task('today, 18:00', { dueDate: '2026-11-05', reminderAt: '2026-11-05T17:00:00Z', isReminderOn: true }),
+    ]
+    const titles = (key: 'default' | 'dueDate') =>
+      sortTasks(list, { key, dir: 'asc' }, '2026-11-05').map((t) => t.title)
+    expect(titles('default')).toEqual(['yesterday', 'reminder only', 'today, 18:00', 'tomorrow', 'nothing'])
+    // Choosing "Due date" yourself is taken literally: no due date, last.
+    expect(titles('dueDate').slice(-2).sort()).toEqual(['nothing', 'reminder only'])
+  })
+
   it('orders lists with Tasks first', () => {
     const base = { isOwner: true, isShared: false }
     const lists = orderLists([

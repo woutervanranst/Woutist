@@ -191,12 +191,18 @@ function compareDueDates(a: string | null, b: string | null, dir: 1 | -1): numbe
   return dir * a.localeCompare(b)
 }
 
-export function sortTasks<T extends SortableTask>(tasks: T[], pref: SortPref): T[] {
+/**
+ * Sorts tasks by `pref`. `today` is the user's date: by default a task that has a reminder but no due
+ * date counts as due today, so one whose due date was removed by mistake doesn't sink out of sight.
+ */
+export function sortTasks<T extends SortableTask>(tasks: T[], pref: SortPref, today: string = todayLocal()): T[] {
   const dir = pref.dir === 'asc' ? 1 : -1
   const byCreatedDesc = (a: T, b: T) => b.createdDateTime.localeCompare(a.createdDateTime)
   const cmp: Record<SortKey, (a: T, b: T) => number> = {
     // Due date (earliest first, undated last), then reminder time, then newest first.
-    default: (a, b) => compareDueDates(a.dueDate, b.dueDate, 1) || compareReminders(reminderOf(a), reminderOf(b)),
+    default: (a, b) =>
+      compareDueDates(a.dueDate ?? (reminderOf(a) ? today : null), b.dueDate ?? (reminderOf(b) ? today : null), 1) ||
+      compareReminders(reminderOf(a), reminderOf(b)),
     createdDateTime: (a, b) => dir * a.createdDateTime.localeCompare(b.createdDateTime),
     title: (a, b) => dir * a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }),
     importance: (a, b) => dir * (IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance]),
