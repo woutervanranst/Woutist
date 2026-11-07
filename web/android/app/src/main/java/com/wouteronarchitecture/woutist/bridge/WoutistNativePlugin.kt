@@ -26,10 +26,12 @@ import kotlinx.coroutines.launch
 import com.wouteronarchitecture.woutist.data.Snapshot
 import com.wouteronarchitecture.woutist.data.SnapshotStore
 import com.wouteronarchitecture.woutist.reminders.Notifications
+import com.wouteronarchitecture.woutist.reminders.ReminderRules
 import com.wouteronarchitecture.woutist.reminders.ReminderScheduler
 import com.wouteronarchitecture.woutist.sync.WoutistMessagingService
 import com.wouteronarchitecture.woutist.work.RefreshWorker
 import com.wouteronarchitecture.woutist.work.TaskOpWorker
+import java.time.Instant
 
 /** JS bridge for reminders, the widget and notification taps; the JS side is `WoutistNative` in `plugins.ts`. */
 @CapacitorPlugin(
@@ -119,6 +121,25 @@ class WoutistNativePlugin : Plugin() {
                 .put("exactAlarms", ReminderScheduler.canScheduleExact(context))
                 .put("batteryUnrestricted", power.isIgnoringBatteryOptimizations(context.packageName)),
         )
+    }
+
+    /**
+     * Notifies again for every open task whose reminder has come due (after a reboot, an update or an
+     * accidental swipe lost the notifications). Oldest first, so the latest ends up on top.
+     */
+    @PluginMethod
+    fun showPastReminders(call: PluginCall) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return call.reject("Notifications are off for Woutist. Allow them above, then try again.")
+        }
+        val current = store.current() ?: return call.resolve(JSObject().put("count", 0))
+        val due = ReminderRules.pastDue(current, Instant.now())
+        due.forEach {
+            // Recorded as shown, so a missed-reminder pass after a reboot doesn't notify a second time.
+            ReminderScheduler.markFired(context, it.id, Instant.parse(it.reminderAt))
+            Notifications.showReminder(context, current, it.id)
+        }
+        call.resolve(JSObject().put("count", due.size))
     }
 
     @PluginMethod

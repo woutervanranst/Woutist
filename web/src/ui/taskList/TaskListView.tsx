@@ -91,7 +91,7 @@ const useStyles = makeStyles({
 export const RENDER_STEP = 50
 
 const SORT_LABELS: Record<SortKey, string> = {
-  default: 'Creation date (newest first)',
+  default: 'Due date, then reminder time',
   importance: 'Importance',
   dueDate: 'Due date',
   title: 'Alphabetically',
@@ -141,7 +141,7 @@ export function TaskListView({ view }: Props) {
   const { open, completed } = useMemo(() => {
     const result = tasksForView(view, tasks ?? [], today)
     return {
-      open: sortTasks(result.open, { key: sortKey, dir: sortDir }),
+      open: sortTasks(result.open, { key: sortKey, dir: sortDir }, today),
       completed: [...result.completed].sort((a, b) =>
         (b.completedDate ?? '').localeCompare(a.completedDate ?? ''),
       ),
@@ -235,7 +235,7 @@ export function TaskListView({ view }: Props) {
 
   // Open tasks first, then completed ones, up to `limit` rows. The completed section appears once
   // every open task is shown; counts always cover everything.
-  const plannedGroups = planned ? groupPlanned(open, today) : []
+  const plannedGroups = planned ? groupPlanned(open, today, sortKey === 'default') : []
   const openShown = Math.min(open.length, limit)
   const completedExpanded = completedView || showCompleted
   const completedShown = openShown < open.length || !completedExpanded ? 0 : Math.min(completed.length, limit - openShown)

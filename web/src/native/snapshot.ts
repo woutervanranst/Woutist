@@ -2,7 +2,7 @@ import type { Prefs } from '../app/prefs'
 import type { DateSettings } from '../models/quickDates'
 import { isTempId, type Task, type TodoList, type WellknownListName } from '../models/todo'
 import { instantToLocalDate, todayLocal } from '../models/time'
-import { sortTasks, type SortPref } from '../models/views'
+import { compareReminders, sortTasks, type SortPref } from '../models/views'
 import { upcomingReminders } from '../services/push/reminders'
 
 /**
@@ -115,7 +115,7 @@ const plannedDateOf = (t: NativeSnapshotTask, timeZone: string) =>
 
 /**
  * The widget's open tasks, in the app's order: a list with its sort preference (an unknown list falls
- * back to Tasks), Important with its sort preference, Planned by date then newest first, Today like
+ * back to Tasks), Important with its sort preference, Planned by date, then reminder time, then newest first, Today like
  * Planned but only up to `today`. The Android widget implements the same rules; both are checked
  * against `widget-expected.json`.
  */
@@ -127,9 +127,11 @@ export function widgetTasks(s: NativeSnapshot, source: WidgetSource, today: stri
         createdDateTime: task.createdDateTime,
         title: task.title,
         dueDate: task.dueDate,
+        reminderAt: task.reminderAt,
         importance: task.important ? ('high' as const) : ('normal' as const),
       })),
       s.sort[key] ?? DEFAULT_SORT,
+      today,
     ).map((w) => w.task)
   if (source.kind === 'list') {
     const known = s.lists.some((l) => l.id === source.listId)
@@ -143,7 +145,12 @@ export function widgetTasks(s: NativeSnapshot, source: WidgetSource, today: stri
       const date = plannedDate(t)
       return date !== null && (source.id !== 'today' || date <= today)
     })
-    .sort((a, b) => plannedDate(a)!.localeCompare(plannedDate(b)!) || b.createdDateTime.localeCompare(a.createdDateTime))
+    .sort(
+      (a, b) =>
+        plannedDate(a)!.localeCompare(plannedDate(b)!) ||
+        compareReminders(a.reminderAt, b.reminderAt) ||
+        b.createdDateTime.localeCompare(a.createdDateTime),
+    )
 }
 
 /**

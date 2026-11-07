@@ -1,7 +1,9 @@
 import { Body1, Button, Caption1, Divider, Subtitle2, makeStyles, tokens } from '@fluentui/react-components'
-import type { NativeSettingsTarget, NativeStatus } from '../../native/plugins'
+import { useState } from 'react'
+import { type NativeSettingsTarget, type NativeStatus, WoutistNative } from '../../native/plugins'
 import { fixNativeSetting } from '../../native/reminderHealth'
 import { useNativeStatus } from '../../native/useNativeStatus'
+import { PAST_REMINDERS_HINT, pastRemindersMessage } from './pastRemindersMessage'
 
 const useStyles = makeStyles({
   section: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalM, margin: `${tokens.spacingVerticalL} 0` },
@@ -28,6 +30,19 @@ const ROWS: Row[] = [
 export function NativeNotificationSettings() {
   const styles = useStyles()
   const [status, refresh] = useNativeStatus()
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  async function showPast() {
+    setBusy(true)
+    try {
+      setMessage(pastRemindersMessage((await WoutistNative.showPastReminders()).count))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Couldn't show the reminders.")
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function fix(row: Row) {
     if ((await fixNativeSetting(row.target)) === 'granted') refresh()
@@ -52,6 +67,13 @@ export function NativeNotificationSettings() {
             </div>
           )
         })}
+        <div className={styles.label}>
+          <Body1>Past reminders</Body1>
+          <Caption1>{message ?? PAST_REMINDERS_HINT}</Caption1>
+        </div>
+        <Button size="small" disabled={busy} onClick={() => void showPast()}>
+          Show past reminders again
+        </Button>
         <Caption1>
           Woutist schedules your reminders on this phone. If the official Microsoft To Do app is also
           installed, it may notify you too.

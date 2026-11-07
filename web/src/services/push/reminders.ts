@@ -31,3 +31,14 @@ export function upcomingReminders(candidates: ReminderDto[], now: Date): Reminde
 export function fingerprint(reminders: ReminderDto[]): string {
   return reminders.map((r) => `${r.taskId}@${r.fireAt}`).join('|')
 }
+
+/**
+ * Open tasks whose reminder has already come due, oldest first: what "show past reminders again"
+ * notifies. (The Android app applies the same rule to its snapshot, in `ReminderRules.pastDue`.)
+ */
+export function pastReminders(tasks: Task[], now: Date = new Date()): Task[] {
+  return tasks
+    .filter((t) => t.isReminderOn && t.reminderAt && !t.completed && !isTempId(t.id) && !isTempId(t.listId))
+    .filter((t) => Date.parse(t.reminderAt!) <= now.getTime())
+    .sort((a, b) => a.reminderAt!.localeCompare(b.reminderAt!) || a.id.localeCompare(b.id))
+}
