@@ -40,6 +40,8 @@ export interface WoutistNativePlugin {
   getStatus(): Promise<NativeStatus>
   requestNotificationPermission(): Promise<{ granted: boolean }>
   openSystemSettings(options: { target: NativeSettingsTarget }): Promise<void>
+  /** Notifies again for every open task whose reminder has already come due; resolves with how many. */
+  showPastReminders(): Promise<{ count: number }>
   consumeLaunchUrl(): Promise<{ url: string | null }>
   /** This phone's FCM token for sync signals; `null` when the build has no Firebase configuration. */
   getFcmToken(): Promise<{ token: string | null }>

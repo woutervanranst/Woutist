@@ -1,5 +1,6 @@
 package com.wouteronarchitecture.woutist.reminders
 
+import com.wouteronarchitecture.woutist.data.SnapTask
 import com.wouteronarchitecture.woutist.data.Snapshot
 import java.time.Duration
 import java.time.Instant
@@ -28,4 +29,16 @@ object ReminderRules {
             .take(MAX)
             .toList()
     }
+
+    /**
+     * The open tasks whose reminder has already come due, oldest first: what "show past reminders again"
+     * notifies. The snapshot holds open tasks only, and `reminderAt` only while the reminder is on.
+     * (`pastReminders` in `web/src/services/push/reminders.ts` is the web twin.)
+     */
+    fun pastDue(s: Snapshot, now: Instant): List<SnapTask> =
+        s.tasks.asSequence()
+            .filter { it.reminderAt != null && !it.id.startsWith("tmp_") }
+            .filter { Instant.parse(it.reminderAt) <= now }
+            .sortedWith(compareBy<SnapTask> { Instant.parse(it.reminderAt) }.thenBy { it.id })
+            .toList()
 }

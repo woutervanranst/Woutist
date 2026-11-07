@@ -4,6 +4,9 @@ import { useServices } from '../../app/AppServices'
 import { useInstallPrompt } from '../../platform/pwa'
 import { isNative } from '../../platform/native'
 import { PushController } from '../../services/push/pushController'
+import { showPastReminders } from '../../services/push/showPastReminders'
+import { useAllTasks } from '../hooks'
+import { PAST_REMINDERS_HINT, pastRemindersMessage } from './pastRemindersMessage'
 import { NativeNotificationSettings } from './NativeNotificationSettings'
 
 const useStyles = makeStyles({
@@ -19,6 +22,8 @@ function WebNotificationSettings() {
   const styles = useStyles()
   const { push } = useServices()
   const install = useInstallPrompt()
+  const tasks = useAllTasks()
+  const [shown, setShown] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const state = useSyncExternalStore(
@@ -63,6 +68,19 @@ function WebNotificationSettings() {
               titles stay on your devices. If the official To Do app is also installed, you may get two
               notifications.
             </Caption1>
+            {state === 'on' && (
+              <>
+                <Button
+                  size="small"
+                  appearance="secondary"
+                  disabled={busy || !tasks}
+                  onClick={() => void run(async () => setShown(await showPastReminders(tasks ?? [])))}
+                >
+                  Show past reminders again
+                </Button>
+                <Caption1>{shown === null ? PAST_REMINDERS_HINT : pastRemindersMessage(shown)}</Caption1>
+              </>
+            )}
             <Button
               size="small"
               appearance="secondary"
