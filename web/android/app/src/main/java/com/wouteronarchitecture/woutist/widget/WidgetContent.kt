@@ -43,14 +43,14 @@ object WidgetContent {
 
     /** The open tasks. Today is Planned up to [today]: due or overdue. */
     fun tasks(s: Snapshot, source: WidgetSource, today: LocalDate = todayIn(s)): List<SnapTask> = when (val resolved = resolve(s, source)) {
-        is WidgetSource.List -> sorted(s.tasks.filter { it.listId == resolved.listId }, s.sort["list:${resolved.listId}"])
+        is WidgetSource.List -> sorted(s.tasks.filter { it.listId == resolved.listId }, s.sort["list:${resolved.listId}"], today)
         is WidgetSource.Smart -> when (resolved.id) {
-            "important" -> sorted(s.tasks.filter { it.important }, s.sort["smart:important"])
+            "important" -> sorted(s.tasks.filter { it.important }, s.sort["smart:important"], today)
             else -> {
                 val zone = zoneOf(s)
                 val until = today.toString()
                 s.tasks.filter { t -> plannedDate(t, zone)?.let { resolved.id != "today" || it <= until } == true }
-                    .sortedWith(compareBy<SnapTask> { plannedDate(it, zone) }.then(byCreatedDesc))
+                    .sortedWith(compareBy<SnapTask> { plannedDate(it, zone) }.then(byReminder).then(byCreatedDesc))
             }
         }
     }
@@ -113,8 +113,11 @@ object WidgetContent {
 
     private val byCreatedDesc: Comparator<SnapTask> = compareByDescending { it.createdDateTime }
 
-    /** `sortTasks` from `web/src/models/views.ts`; ties go newest first. */
-    private fun sorted(tasks: List<SnapTask>, pref: SortPref?): List<SnapTask> {
+    /** Earliest reminder first, tasks without one last (`compareReminders` in `views.ts`). */
+    private val byReminder: Comparator<SnapTask> = compareBy<SnapTask, String?>(nullsLast()) { it.reminderAt }
+
+    /** `sortTasks` from `web/src/models/views.ts`; ties go newest first. The default is due date, then reminder. */
+    private fun sorted(tasks: List<SnapTask>, pref: SortPref?, today: LocalDate): List<SnapTask> {
         val p = pref ?: DEFAULT_SORT
         val dir = if (p.dir == "asc") 1 else -1
         val titles = Collator.getInstance().apply { strength = Collator.PRIMARY }
@@ -130,7 +133,10 @@ object WidgetContent {
                     else -> dir * a.dueDate.compareTo(b.dueDate)
                 }
             }
-            else -> byCreatedDesc
+            // Due date (undated last), then reminder time; ties go newest first below. A reminder without
+            // a due date counts as due today.
+            else -> compareBy<SnapTask, String?>(nullsLast()) { it.dueDate ?: if (it.reminderAt != null) today.toString() else null }
+                .then(byReminder)
         }
         return tasks.sortedWith(primary.then(byCreatedDesc))
     }

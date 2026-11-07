@@ -171,6 +171,48 @@ describe('limitGroups', () => {
     expect(sortTasks(list, { key: 'title', dir: 'asc' }).map((t) => t.title)).toEqual(['a', 'B', 'C'])
   })
 
+  it('sorts by due date, then reminder time, by default', () => {
+    const list = [
+      task('no date, no reminder'),
+      task('no date, reminder', { reminderAt: '2026-11-01T08:00:00Z', isReminderOn: true }),
+      task('later due', { dueDate: '2026-11-02' }),
+      task('due, 18:00', { dueDate: '2026-11-01', reminderAt: '2026-11-01T18:00:00Z', isReminderOn: true }),
+      task('due, older', { dueDate: '2026-11-01', createdDateTime: '2026-01-01T00:00:00Z' }),
+      task('due, 9:00', { dueDate: '2026-11-01', reminderAt: '2026-11-01T09:00:00Z', isReminderOn: true }),
+      // A reminder that is switched off doesn't count; ties then go newest first.
+      task('due, off', {
+        dueDate: '2026-11-01',
+        reminderAt: '2026-11-01T07:00:00Z',
+        isReminderOn: false,
+        createdDateTime: '2026-01-02T00:00:00Z',
+      }),
+    ]
+    expect(sortTasks(list, { key: 'default', dir: 'asc' }).map((t) => t.title)).toEqual([
+      'due, 9:00',
+      'due, 18:00',
+      'due, off',
+      'due, older',
+      'later due',
+      'no date, reminder',
+      'no date, no reminder',
+    ])
+  })
+
+  it('counts a reminder without a due date as due today, by default', () => {
+    const list = [
+      task('tomorrow', { dueDate: '2026-11-06' }),
+      task('reminder only', { reminderAt: '2026-11-05T08:00:00Z', isReminderOn: true }),
+      task('nothing'),
+      task('yesterday', { dueDate: '2026-11-04' }),
+      task('today, 18:00', { dueDate: '2026-11-05', reminderAt: '2026-11-05T17:00:00Z', isReminderOn: true }),
+    ]
+    const titles = (key: 'default' | 'dueDate') =>
+      sortTasks(list, { key, dir: 'asc' }, '2026-11-05').map((t) => t.title)
+    expect(titles('default')).toEqual(['yesterday', 'reminder only', 'today, 18:00', 'tomorrow', 'nothing'])
+    // Choosing "Due date" yourself is taken literally: no due date, last.
+    expect(titles('dueDate').slice(-2).sort()).toEqual(['nothing', 'reminder only'])
+  })
+
   it('orders lists with Tasks first', () => {
     const base = { isOwner: true, isShared: false }
     const lists = orderLists([
