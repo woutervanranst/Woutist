@@ -127,12 +127,21 @@ export function plannedGroup(date: string, today: string): PlannedGroup {
   return 'later'
 }
 
+/**
+ * Planned tasks grouped by when they're due. Within a day the order is the one the tasks came in, or,
+ * with `byReminder`, earliest reminder first (tasks without one last).
+ */
 export function groupPlanned(
   tasks: Task[],
   today: string = todayLocal(),
+  byReminder = false,
 ): { group: PlannedGroup; tasks: Task[] }[] {
   const groups = new Map<PlannedGroup, Task[]>()
-  const sorted = [...tasks].sort((a, b) => (plannedDate(a) ?? '').localeCompare(plannedDate(b) ?? ''))
+  const sorted = [...tasks].sort(
+    (a, b) =>
+      (plannedDate(a) ?? '').localeCompare(plannedDate(b) ?? '') ||
+      (byReminder ? compareReminders(reminderOf(a), reminderOf(b)) : 0),
+  )
   for (const task of sorted) {
     const date = plannedDate(task)
     if (!date) continue
@@ -157,25 +166,41 @@ export function limitGroups<G extends { tasks: Task[] }>(groups: G[], limit: num
 
 const IMPORTANCE_RANK = { high: 0, normal: 1, low: 2 } as const
 
-/** The fields sorting reads; the Android widget sorts its snapshot tasks with the same rules. */
-export type SortableTask = Pick<Task, 'createdDateTime' | 'title' | 'importance' | 'dueDate'>
+/**
+ * The fields sorting reads; the Android widget sorts its snapshot tasks with the same rules. A snapshot
+ * task has no `isReminderOn`: its `reminderAt` is already null when the reminder is off.
+ */
+export type SortableTask = Pick<Task, 'createdDateTime' | 'title' | 'importance' | 'dueDate' | 'reminderAt'> & {
+  isReminderOn?: boolean
+}
+
+/** When a task's reminder fires (ISO instant), or null when it has none switched on. */
+export function reminderOf(task: Pick<SortableTask, 'reminderAt' | 'isReminderOn'>): string | null {
+  return task.isReminderOn === false ? null : task.reminderAt
+}
+
+/** Earliest reminder first; tasks without a reminder go last. */
+export function compareReminders(a: string | null, b: string | null): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1
+  return a.localeCompare(b)
+}
+
+/** Tasks without a due date go last, whatever the direction. */
+function compareDueDates(a: string | null, b: string | null, dir: 1 | -1): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1
+  return dir * a.localeCompare(b)
+}
 
 export function sortTasks<T extends SortableTask>(tasks: T[], pref: SortPref): T[] {
   const dir = pref.dir === 'asc' ? 1 : -1
   const byCreatedDesc = (a: T, b: T) => b.createdDateTime.localeCompare(a.createdDateTime)
   const cmp: Record<SortKey, (a: T, b: T) => number> = {
-    // Newest first, like Microsoft To Do's default "add to top".
-    default: byCreatedDesc,
+    // Due date (earliest first, undated last), then reminder time, then newest first.
+    default: (a, b) => compareDueDates(a.dueDate, b.dueDate, 1) || compareReminders(reminderOf(a), reminderOf(b)),
     createdDateTime: (a, b) => dir * a.createdDateTime.localeCompare(b.createdDateTime),
     title: (a, b) => dir * a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }),
     importance: (a, b) => dir * (IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance]),
-    dueDate: (a, b) => {
-      // Tasks without a due date always go last.
-      if (!a.dueDate && !b.dueDate) return 0
-      if (!a.dueDate) return 1
-      if (!b.dueDate) return -1
-      return dir * a.dueDate.localeCompare(b.dueDate)
-    },
+    dueDate: (a, b) => compareDueDates(a.dueDate, b.dueDate, dir),
   }
   return [...tasks].sort((a, b) => cmp[pref.key](a, b) || byCreatedDesc(a, b))
 }

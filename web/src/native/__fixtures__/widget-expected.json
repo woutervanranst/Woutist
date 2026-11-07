@@ -1,8 +1,8 @@
 {
   "list:L1": ["task-b", "task-90d", "task-91d", "task-past", "task-grace"],
   "smart:important": ["task-b"],
-  "smart:planned": ["task-overdue", "task-a", "task-b", "task-past", "task-grace", "task-off", "task-90d", "task-91d"],
-  "smart:today": ["task-overdue", "task-a", "task-b", "task-past", "task-grace"],
+  "smart:planned": ["task-overdue", "task-past", "task-grace", "task-a", "task-b", "task-off", "task-90d", "task-91d"],
+  "smart:today": ["task-overdue", "task-past", "task-grace", "task-a", "task-b"],
   "done:smart:today": ["done-new", "done-old"],
   "done:smart:planned": []
 }

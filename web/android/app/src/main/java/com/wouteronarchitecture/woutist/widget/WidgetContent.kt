@@ -50,7 +50,7 @@ object WidgetContent {
                 val zone = zoneOf(s)
                 val until = today.toString()
                 s.tasks.filter { t -> plannedDate(t, zone)?.let { resolved.id != "today" || it <= until } == true }
-                    .sortedWith(compareBy<SnapTask> { plannedDate(it, zone) }.then(byCreatedDesc))
+                    .sortedWith(compareBy<SnapTask> { plannedDate(it, zone) }.then(byReminder).then(byCreatedDesc))
             }
         }
     }
@@ -113,7 +113,10 @@ object WidgetContent {
 
     private val byCreatedDesc: Comparator<SnapTask> = compareByDescending { it.createdDateTime }
 
-    /** `sortTasks` from `web/src/models/views.ts`; ties go newest first. */
+    /** Earliest reminder first, tasks without one last (`compareReminders` in `views.ts`). */
+    private val byReminder: Comparator<SnapTask> = compareBy<SnapTask, String?>(nullsLast()) { it.reminderAt }
+
+    /** `sortTasks` from `web/src/models/views.ts`; ties go newest first. The default is due date, then reminder. */
     private fun sorted(tasks: List<SnapTask>, pref: SortPref?): List<SnapTask> {
         val p = pref ?: DEFAULT_SORT
         val dir = if (p.dir == "asc") 1 else -1
@@ -130,7 +133,8 @@ object WidgetContent {
                     else -> dir * a.dueDate.compareTo(b.dueDate)
                 }
             }
-            else -> byCreatedDesc
+            // Due date (undated last), then reminder time; ties go newest first below.
+            else -> compareBy<SnapTask, String?>(nullsLast()) { it.dueDate }.then(byReminder)
         }
         return tasks.sortedWith(primary.then(byCreatedDesc))
     }
