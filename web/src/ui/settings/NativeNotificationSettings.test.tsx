@@ -6,6 +6,7 @@ const native = vi.hoisted(() => ({
   getStatus: vi.fn(),
   requestNotificationPermission: vi.fn(),
   openSystemSettings: vi.fn(async () => {}),
+  showPastReminders: vi.fn(),
 }))
 vi.mock('../../native/plugins', () => ({ WoutistNative: native }))
 
@@ -24,6 +25,7 @@ beforeEach(() => {
   native.getStatus.mockReset().mockResolvedValue({ notifications: false, exactAlarms: true, batteryUnrestricted: false })
   native.requestNotificationPermission.mockReset().mockResolvedValue({ granted: false })
   native.openSystemSettings.mockClear()
+  native.showPastReminders.mockReset().mockResolvedValue({ count: 3 })
 })
 
 describe('NativeNotificationSettings', () => {
@@ -60,5 +62,26 @@ describe('NativeNotificationSettings', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Allow notifications' })).toBeDisabled())
+  })
+
+  it('shows the past reminders again and says how many', async () => {
+    renderIt()
+    fireEvent.click(await screen.findByRole('button', { name: 'Show past reminders again' }))
+    expect(await screen.findByText('Showed 3 reminders.')).toBeInTheDocument()
+    expect(native.showPastReminders).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so when no reminder has come due', async () => {
+    native.showPastReminders.mockResolvedValue({ count: 0 })
+    renderIt()
+    fireEvent.click(await screen.findByRole('button', { name: 'Show past reminders again' }))
+    expect(await screen.findByText(/No reminders have come due/)).toBeInTheDocument()
+  })
+
+  it('shows why it could not, e.g. notifications being off', async () => {
+    native.showPastReminders.mockRejectedValue(new Error('Notifications are off for Woutist.'))
+    renderIt()
+    fireEvent.click(await screen.findByRole('button', { name: 'Show past reminders again' }))
+    expect(await screen.findByText('Notifications are off for Woutist.')).toBeInTheDocument()
   })
 })
