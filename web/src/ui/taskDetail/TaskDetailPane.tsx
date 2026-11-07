@@ -22,7 +22,6 @@ import {
 } from '@fluentui/react-components'
 import { AlertRegular } from '@fluentui/react-icons/svg/alert'
 import { ArrowRepeatAllRegular } from '@fluentui/react-icons/svg/arrow-repeat-all'
-import { ArrowUpRegular } from '@fluentui/react-icons/svg/arrow-up'
 import { AttachRegular } from '@fluentui/react-icons/svg/attach'
 import { CalendarLtrRegular } from '@fluentui/react-icons/svg/calendar-ltr'
 import { CheckmarkCircleFilled } from '@fluentui/react-icons/svg/checkmark-circle'
@@ -42,6 +41,7 @@ import { isTempId } from '../../models/todo'
 import { todayLocal } from '../../models/time'
 import { describeRecurrence, formatDate, formatFileSize, formatReminder } from '../../models/presets'
 import { reminderLabel } from '../../models/dateReminder'
+import { hasLink, splitLinks } from '../../models/linkify'
 import { categoryColor } from '../common/categoryColors'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { RepeatMenu } from '../dates/RepeatMenu'
@@ -74,10 +74,54 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   titleRow: { display: 'flex', alignItems: 'flex-start', gap: tokens.spacingHorizontalXS, padding: tokens.spacingVerticalS },
-  titleInput: { flex: 1, fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold },
+  // Fluent applies a Textarea's font to its inner element, so the title weight goes on the slot.
+  titleInput: { flex: 1, minWidth: 0 },
+  // Measured against the Microsoft To Do Android app: cap height ~23px, Roboto Medium, ~31px lines.
+  titleText: { fontSize: '23px', lineHeight: '31px', fontWeight: tokens.fontWeightMedium },
+  // The title field's own padding, shared by the field and its link twin so they line up exactly.
+  titleBox: { paddingTop: '4px', paddingBottom: '4px', paddingLeft: '10px', paddingRight: '10px' },
+  // As tall as one title line plus the field's padding and border, so the circle and the star sit
+  // on the centre of the first line however long the title grows.
+  titleButton: { height: '41px', minWidth: '34px', alignSelf: 'flex-start' },
+  // Read-only twin of the title field that shows web addresses as links; it mirrors the field's box.
+  titleLinks: {
+    flex: 1,
+    minWidth: 0,
+    boxSizing: 'border-box',
+    border: '1px solid transparent',
+    cursor: 'text',
+    overflowWrap: 'anywhere',
+    whiteSpace: 'pre-wrap',
+  },
+  titleLink: { fontWeight: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' },
   done: { textDecoration: 'line-through' },
-  step: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalXS, paddingLeft: tokens.spacingHorizontalS },
-  stepInput: { flex: 1 },
+  // Circle (and "..." button) column shared by the title and the steps, so they line up.
+  iconCell: { width: '34px', minWidth: '34px', flexShrink: 0 },
+  stepCircle: { color: tokens.colorNeutralForeground4 },
+  steps: { display: 'flex', flexDirection: 'column' },
+  step: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    padding: `0 ${tokens.spacingVerticalS}`,
+    minHeight: '40px',
+  },
+  // No box or underline: the steps read as plain lines of text, like in Microsoft To Do.
+  stepInput: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    // Brings the text flush with the title's text above.
+    marginLeft: '-2px',
+    '::after': { display: 'none' },
+  },
+  newStepIcon: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: tokens.colorNeutralForeground4,
+  },
   action: {
     justifyContent: 'flex-start',
     width: '100%',
@@ -230,6 +274,7 @@ function TitleEditor({ task }: { task: Task }) {
   const styles = useStyles()
   const { repo } = useServices()
   const [title, setTitle] = useState(task.title)
+  const [editing, setEditing] = useState(false)
   const focused = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -247,44 +292,77 @@ function TitleEditor({ task }: { task: Task }) {
 
   const commit = () => {
     focused.current = false
+    setEditing(false)
     save(title)
     if (!title.trim()) setTitle(task.title)
   }
 
+  // Web addresses show as links until the title is tapped; then the field takes over for editing.
+  const showLinks = !editing && hasLink(title)
+
   return (
     <div className={styles.titleRow}>
       <Button
+        className={styles.titleButton}
         appearance="transparent"
         shape="circular"
         aria-label={task.completed ? 'Mark as not completed' : 'Mark as completed'}
         icon={task.completed ? <CheckmarkCircleFilled fontSize={24} /> : <CircleRegular fontSize={24} />}
         onClick={() => void repo.toggleCompleted(task.id)}
       />
-      <Textarea
-        className={mergeClasses(styles.titleInput, task.completed === 1 && styles.done)}
-        appearance="filled-lighter"
-        resize="none"
-        rows={1}
-        // Grow with the title (CSS field-sizing; falls back to a single row elsewhere).
-        textarea={{ style: { fieldSizing: 'content', minHeight: 0 } as React.CSSProperties }}
-        value={title}
-        aria-label="Task title"
-        onFocus={() => (focused.current = true)}
-        onChange={(_, d) => {
-          const value = d.value.replace(/\n/g, '')
-          setTitle(value)
-          if (timer.current) clearTimeout(timer.current)
-          timer.current = setTimeout(() => save(value), 1000)
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            ;(e.target as HTMLTextAreaElement).blur()
-          }
-        }}
-      />
+      {showLinks ? (
+        <div
+          className={mergeClasses(styles.titleLinks, styles.titleBox, styles.titleText, task.completed === 1 && styles.done)}
+          role="textbox"
+          aria-label="Task title"
+          tabIndex={0}
+          onFocus={(e) => e.target === e.currentTarget && setEditing(true)}
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest('a')) setEditing(true)
+          }}
+        >
+          {splitLinks(title).map((part, i) =>
+            part.href ? (
+              <Link key={i} href={part.href} target="_blank" rel="noreferrer" className={styles.titleLink}>
+                {part.text}
+              </Link>
+            ) : (
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </div>
+      ) : (
+        <Textarea
+          className={styles.titleInput}
+          appearance="filled-lighter"
+          resize="none"
+          rows={1}
+          autoFocus={editing}
+          // Grow with the title (CSS field-sizing; falls back to a single row elsewhere).
+          textarea={{
+            className: mergeClasses(styles.titleText, styles.titleBox, task.completed === 1 && styles.done),
+            style: { fieldSizing: 'content', minHeight: 0 } as React.CSSProperties,
+          }}
+          value={title}
+          aria-label="Task title"
+          onFocus={() => (focused.current = true)}
+          onChange={(_, d) => {
+            const value = d.value.replace(/\n/g, '')
+            setTitle(value)
+            if (timer.current) clearTimeout(timer.current)
+            timer.current = setTimeout(() => save(value), 1000)
+          }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              ;(e.target as HTMLTextAreaElement).blur()
+            }
+          }}
+        />
+      )}
       <Button
+        className={styles.titleButton}
         appearance="transparent"
         aria-label={task.important ? 'Remove importance' : 'Mark as important'}
         icon={task.important ? <StarFilled /> : <StarRegular />}
@@ -298,29 +376,49 @@ function StepsEditor({ task }: { task: Task }) {
   const styles = useStyles()
   const { repo } = useServices()
   const [newStep, setNewStep] = useState('')
+  // Mirrors newStep so a submit and the blur that follows it can't both add the same step.
+  const pending = useRef('')
+
+  function setPending(value: string) {
+    pending.current = value
+    setNewStep(value)
+  }
+
+  function add() {
+    const name = pending.current.trim()
+    setPending('')
+    if (name) void repo.addStep(task.id, name)
+  }
 
   return (
-    <div>
+    <div className={styles.steps}>
       {task.steps.map((step) => (
         <StepRow key={`${step.id}:${step.displayName}`} task={task} step={step} />
       ))}
-      <div className={styles.step}>
+      {/* A form, so the Enter / Go key of any mobile keyboard adds the step (those often don't send a
+          usable keydown). Leaving the field with text in it adds the step too. */}
+      <form
+        className={styles.step}
+        onSubmit={(e) => {
+          e.preventDefault()
+          add()
+        }}
+      >
+        <span className={mergeClasses(styles.iconCell, styles.newStepIcon)}>
+          <CircleRegular fontSize={20} />
+        </span>
         <Input
           className={styles.stepInput}
-          appearance="underline"
-          contentBefore={<CircleRegular />}
+          appearance="filled-lighter"
           placeholder={task.steps.length ? 'Next step' : 'Add step'}
           value={newStep}
           aria-label="Add step"
-          onChange={(_, d) => setNewStep(d.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && newStep.trim()) {
-              void repo.addStep(task.id, newStep)
-              setNewStep('')
-            }
-          }}
+          enterKeyHint="enter"
+          autoComplete="off"
+          onChange={(_, d) => setPending(d.value)}
+          onBlur={add}
         />
-      </div>
+      </form>
     </div>
   )
 }
@@ -334,16 +432,17 @@ function StepRow({ task, step }: { task: Task; step: Step }) {
   return (
     <div className={styles.step}>
       <Button
+        className={styles.iconCell}
         appearance="transparent"
         size="small"
         shape="circular"
         aria-label={step.isChecked ? 'Uncheck step' : 'Check step'}
-        icon={step.isChecked ? <CheckmarkCircleFilled /> : <CircleRegular />}
+        icon={step.isChecked ? <CheckmarkCircleFilled fontSize={20} /> : <CircleRegular fontSize={20} className={styles.stepCircle} />}
         onClick={() => void repo.updateStep(task.id, step.id, { isChecked: !step.isChecked })}
       />
       <Input
         className={mergeClasses(styles.stepInput, step.isChecked && styles.done)}
-        appearance="underline"
+        appearance="filled-lighter"
         value={name}
         aria-label="Step"
         onChange={(_, d) => setName(d.value)}
@@ -356,13 +455,16 @@ function StepRow({ task, step }: { task: Task; step: Step }) {
       />
       <Menu>
         <MenuTrigger disableButtonEnhancement>
-          <Button appearance="transparent" size="small" icon={<MoreHorizontalRegular />} aria-label="Step options" />
+          <Button
+            className={styles.iconCell}
+            appearance="transparent"
+            size="small"
+            icon={<MoreHorizontalRegular />}
+            aria-label="Step options"
+          />
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
-            <MenuItem icon={<ArrowUpRegular />} onClick={() => void repo.promoteStep(task.id, step.id)}>
-              Promote to task
-            </MenuItem>
             <MenuItem icon={<DeleteRegular />} onClick={() => void repo.deleteStep(task.id, step.id)}>
               Delete step
             </MenuItem>
