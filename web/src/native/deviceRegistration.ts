@@ -44,19 +44,30 @@ export class DeviceRegistration {
     this.store(null)
   }
 
+  /** Two independent steps: one failing (e.g. the hook call) must not stop the other. */
   private async register() {
+    await Promise.all([this.registerToken(), this.sendHook()])
+  }
+
+  private async registerToken() {
     try {
-      if (!this.hookSent) {
-        const hook = await this.opts.api.getGraphHook()
-        await this.opts.native.setNotificationUrl({ url: hook.notificationUrl })
-        this.hookSent = true
-      }
       const { token } = await this.opts.native.getFcmToken()
       if (!token || token === this.stored()) return
       await this.opts.api.putDevice(token)
       this.store(token)
     } catch (error) {
       console.warn('Registering this device for sync signals failed', error)
+    }
+  }
+
+  private async sendHook() {
+    if (this.hookSent) return
+    try {
+      const hook = await this.opts.api.getGraphHook()
+      await this.opts.native.setNotificationUrl({ url: hook.notificationUrl })
+      this.hookSent = true
+    } catch (error) {
+      console.warn('Giving the notification URL to native code failed', error)
     }
   }
 
