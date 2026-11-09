@@ -40,15 +40,19 @@ const spin = { to: { transform: 'rotate(360deg)' } }
 const noMotion = { '@media (prefers-reduced-motion: reduce)': { animationName: 'none' } }
 
 const useStyles = makeStyles({
+  // As big as the button's icon slot (1em: 20px). A bigger box was squeezed to the slot's width but kept its
+  // height, so the ring sat at its top and the arrows below the ring's centre.
   box: {
     position: 'relative',
     display: 'inline-grid',
     placeItems: 'center',
-    width: '28px',
-    height: '28px',
+    flexShrink: 0,
+    width: '1em',
+    height: '1em',
     color: tokens.colorNeutralForegroundOnBrand,
   },
-  ring: { position: 'absolute', inset: 0, overflow: 'visible' },
+  // An absolutely placed SVG doesn't stretch to its insets: size it to the box explicitly.
+  ring: { position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' },
   track: { stroke: 'currentColor', opacity: 0.3 },
   arc: { stroke: 'currentColor', transitionProperty: 'stroke-dasharray', transitionDuration: '0.3s' },
   rotating: {
@@ -62,7 +66,7 @@ const useStyles = makeStyles({
   },
   arrows: {
     display: 'inline-flex',
-    fontSize: '14px',
+    fontSize: '0.7em',
     animationName: spin,
     animationDuration: '1.6s',
     animationTimingFunction: 'linear',
