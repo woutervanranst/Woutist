@@ -115,4 +115,31 @@ describe('DeviceRegistration', () => {
     await registration.unregister()
     expect(calls).toEqual(['put fcm-1', 'delete fcm-1'])
   })
+
+  it('reports the result of the registration', async () => {
+    expect(registration.getResult()).toBeNull()
+    const seen: unknown[] = []
+    registration.subscribe((r) => seen.push(r))
+    await registration.run()
+    expect(registration.getResult()).toEqual({ ok: true })
+    await registration.run() // same token: nothing to do, still registered
+    expect(registration.getResult()).toEqual({ ok: true })
+    expect(seen).toEqual([{ ok: true }])
+  })
+
+  it('says why registering failed', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    failPut = true
+    await registration.run()
+    expect(registration.getResult()).toEqual({ ok: false, error: "Couldn't register this phone: offline" })
+    failPut = false
+    await registration.run()
+    expect(registration.getResult()).toEqual({ ok: true })
+  })
+
+  it('says so when the phone has no push token', async () => {
+    token = null
+    await registration.run()
+    expect(registration.getResult()).toEqual({ ok: false, error: 'This phone has no push token (no Firebase in this build).' })
+  })
 })
