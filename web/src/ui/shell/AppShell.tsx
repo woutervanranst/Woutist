@@ -16,18 +16,15 @@ import {
   Toaster,
   Tooltip,
   makeStyles,
+  mergeClasses,
   tokens,
   useToastController,
 } from '@fluentui/react-components'
 import { ArrowLeftRegular } from '@fluentui/react-icons/svg/arrow-left'
-import { ArrowSyncRegular } from '@fluentui/react-icons/svg/arrow-sync'
-import { CloudCheckmarkRegular } from '@fluentui/react-icons/svg/cloud-checkmark'
-import { CloudOffRegular } from '@fluentui/react-icons/svg/cloud-off'
-import { ErrorCircleRegular } from '@fluentui/react-icons/svg/error-circle'
 import { NavigationRegular } from '@fluentui/react-icons/svg/navigation'
 import { SettingsRegular } from '@fluentui/react-icons/svg/settings'
 import { SignOutRegular } from '@fluentui/react-icons/svg/sign-out'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useServices, useSignOut } from '../../app/AppServices'
 import { useMediaQuery } from '../../app/theme'
@@ -39,10 +36,11 @@ import { useInAppReminders } from './useInAppReminders'
 import { Sidebar } from '../sidebar/Sidebar'
 import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
 import { TaskListView } from '../taskList/TaskListView'
-import { useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
+import { useHasUpcomingReminders, useListDimmed, useLists, useSelectedTask, useSyncStatus } from '../hooks'
 import { isNative } from '../../platform/native'
 import { ReminderHealthBanner } from './ReminderHealthBanner'
 import { SearchField } from './SearchField'
+import { SyncIndicator } from './SyncIndicator'
 
 const useStyles = makeStyles({
   root: {
@@ -98,6 +96,11 @@ const useStyles = makeStyles({
   body: { display: 'flex', minHeight: 0, minWidth: 0, overflow: 'hidden' },
   sidebar: { width: '280px', flexShrink: 0, borderRight: `1px solid ${tokens.colorNeutralStroke2}` },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
+  // Data that isn't confirmed current yet (still interactive). Reduced motion: no fade.
+  mainStale: {
+    opacity: 0.55,
+    '@media (prefers-reduced-motion: no-preference)': { transitionProperty: 'opacity', transitionDuration: '0.2s' },
+  },
   detail: { width: '380px', flexShrink: 0, borderLeft: `1px solid ${tokens.colorNeutralStroke2}`, minHeight: 0 },
   mobileDetail: { display: 'flex', flexDirection: 'column', height: '100%' },
 })
@@ -122,6 +125,7 @@ export function AppShell() {
   const wide = useMediaQuery('(min-width: 1200px)')
   const [navOpen, setNavOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<'sync' | null>(null)
   const [taskId, select] = useSelectedTask()
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -160,13 +164,21 @@ export function AppShell() {
         <div className={styles.search}>
           <SearchField inputRef={searchRef} />
         </div>
-        <SyncIndicator />
+        <SyncIndicator
+          onDetails={() => {
+            setSettingsSection('sync')
+            setSettingsOpen(true)
+          }}
+        />
         <Tooltip content="Settings" relationship="label">
           <Button
             appearance="transparent"
             className={styles.headerButton}
             icon={<SettingsRegular />}
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => {
+              setSettingsSection(null)
+              setSettingsOpen(true)
+            }}
           />
         </Tooltip>
         <AccountMenu />
@@ -190,7 +202,7 @@ export function AppShell() {
           <Sidebar onNavigate={() => setNavOpen(false)} />
         </OverlayDrawer>
 
-        <main className={styles.main}>
+        <MainArea>
           {!desktop && taskId ? (
             <div className={styles.mobileDetail}>
               <Button
@@ -208,7 +220,7 @@ export function AppShell() {
           ) : (
             <ViewRoutes />
           )}
-        </main>
+        </MainArea>
 
         {detailInline && (
           <div className={styles.detail}>
@@ -217,11 +229,23 @@ export function AppShell() {
         )}
       </div>
 
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} extra={<NotificationSettings />} />
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        scrollTo={settingsSection}
+        extra={<NotificationSettings />}
+      />
       <Toaster toasterId="app" position="bottom" />
       <SyncErrorToasts />
     </div>
   )
+}
+
+/** The main area dims while the list isn't confirmed current. Only this component follows the sync status. */
+function MainArea({ children }: { children: ReactNode }) {
+  const styles = useStyles()
+  const dimmed = useListDimmed()
+  return <main className={mergeClasses(styles.main, dimmed && styles.mainStale)}>{children}</main>
 }
 
 // Views are passed as stable objects: a new one would make the list filter all tasks again, e.g.
@@ -273,31 +297,6 @@ function SearchRoute() {
   const query = params.get('q') ?? ''
   const view = useMemo(() => ({ kind: 'search', query }) as const, [query])
   return <TaskListView view={view} />
-}
-
-function SyncIndicator() {
-  const status = useSyncStatus()
-  const { engine } = useServices()
-  const styles = useStyles()
-  const pending = status.pendingChanges
-  const [icon, label] =
-    status.state === 'syncing'
-      ? [<ArrowSyncRegular key="s" />, 'Syncing…']
-      : status.state === 'offline'
-        ? [<CloudOffRegular key="o" />, `Offline${pending ? ` · ${pending} change${pending === 1 ? '' : 's'} waiting` : ''}`]
-        : status.state === 'error'
-          ? [<ErrorCircleRegular key="e" />, `Sync problem: ${status.error ?? 'unknown error'}`]
-          : [
-              <CloudCheckmarkRegular key="i" />,
-              status.lastSyncAt
-                ? `Synced ${new Date(status.lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${pending ? ` · ${pending} waiting` : ''}`
-                : 'Not synced yet',
-            ]
-  return (
-    <Tooltip content={`${label} (click to sync)`} relationship="label">
-      <Button appearance="transparent" className={styles.headerButton} icon={icon} onClick={() => void engine.sync({ reason: 'manual' })} />
-    </Tooltip>
-  )
 }
 
 function SyncErrorToasts() {
