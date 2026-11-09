@@ -28,6 +28,9 @@ val GRAPH_SCOPES = listOf("User.Read", "Tasks.ReadWrite", "MailboxSettings.ReadW
 /** The signed-in account. `key` matches the web app's per-account partition key format. */
 data class NativeAccount(val key: String, val name: String, val username: String)
 
+/** An access token with its expiry (epoch milliseconds), so the WebView can cache it instead of asking MSAL again. */
+data class AccessToken(val accessToken: String, val expiresOn: Long)
+
 /** Silent token acquisition isn't possible: the user has to sign in (again) interactively. */
 class SignInRequired(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -101,7 +104,10 @@ object AuthManager {
     }
 
     /** Access token without UI. Throws [SignInRequired] when the user must sign in again. */
-    suspend fun tokenSilent(scopes: List<String>): String {
+    suspend fun tokenSilent(scopes: List<String>): String = tokenSilentWithExpiry(scopes).accessToken
+
+    /** Like [tokenSilent], with the expiry. */
+    suspend fun tokenSilentWithExpiry(scopes: List<String>): AccessToken {
         val client = client()
         val account = currentAccount() ?: throw SignInRequired("Not signed in")
         return try {
@@ -117,7 +123,7 @@ object AuthManager {
                         })
                         .build(),
                 )
-            }.accessToken
+            }.toToken()
         } catch (e: MsalUiRequiredException) {
             throw SignInRequired("Sign-in required", e)
         } catch (e: MsalClientException) {
@@ -127,7 +133,7 @@ object AuthManager {
     }
 
     /** Access token, showing the sign-in UI (browser or Authenticator) when needed. */
-    suspend fun tokenInteractive(activity: Activity, scopes: List<String>): String {
+    suspend fun tokenInteractive(activity: Activity, scopes: List<String>): AccessToken {
         val client = client()
         val account = currentAccount()
         val result = suspendCancellableCoroutine<IAuthenticationResult> { cont ->
@@ -138,8 +144,10 @@ object AuthManager {
             if (account != null) builder.forAccount(account)
             client.acquireToken(builder.build())
         }
-        return result.accessToken
+        return result.toToken()
     }
+
+    private fun IAuthenticationResult.toToken() = AccessToken(accessToken, expiresOn.time)
 
     private fun kotlinx.coroutines.CancellableContinuation<IAuthenticationResult>.asCallback() =
         object : AuthenticationCallback {

@@ -16,7 +16,8 @@ export interface WoutistAuthPlugin {
   signIn(): Promise<NativeAccount>
   signOut(): Promise<void>
   getAccount(): Promise<{ account: NativeAccount | null }>
-  acquireToken(options: { scopes: string[]; interactive: boolean }): Promise<{ accessToken: string }>
+  /** `expiresOn` is epoch milliseconds; missing on an older native side. */
+  acquireToken(options: { scopes: string[]; interactive: boolean }): Promise<{ accessToken: string; expiresOn?: number }>
 }
 
 export const WoutistAuth = registerPlugin<WoutistAuthPlugin>('WoutistAuth')
