@@ -60,7 +60,7 @@ export class WoutistDb extends Dexie {
   categories!: EntityTable<CategoryRecord, 'displayName'>
   outbox!: EntityTable<OutboxEntry, 'seq'>
   meta!: EntityTable<MetaRecord, 'key'>
-  /** The newest 100 runs of the sync engine. */
+  /** The runs of the sync engine in the last 24 hours. */
   syncLog!: EntityTable<SyncLogEntry, 'id'>
 
   constructor(name: string) {

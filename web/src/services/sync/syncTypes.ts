@@ -17,9 +17,12 @@ export function strongerReason(a: SyncReason, b: SyncReason): SyncReason {
   return REASON_RANK.indexOf(a) <= REASON_RANK.indexOf(b) ? a : b
 }
 
+/** How long a run stays in the log. */
+export const SYNC_LOG_RETENTION_MS = 24 * 60 * 60 * 1000
+
 export type SyncResult = 'ok' | 'offline' | 'error'
 
-/** One finished run of the sync engine, as kept in the `syncLog` table (newest 100). */
+/** One finished run of the sync engine, as kept in the `syncLog` table (the last 24 hours). */
 export interface SyncLogEntry {
   id?: number
   startedAt: number

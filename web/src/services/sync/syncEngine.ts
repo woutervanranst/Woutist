@@ -14,7 +14,7 @@ import type { OutboxEntry, WoutistDb } from '../db'
 import { graphStatus, isNotFound, isTransient } from '../graphClient'
 import type { TaskService } from '../taskService'
 import { sameTask, sameTaskContent } from './taskDiff'
-import { type SyncLogEntry, type SyncReason, strongerReason } from './syncTypes'
+import { SYNC_LOG_RETENTION_MS, type SyncLogEntry, type SyncReason, strongerReason } from './syncTypes'
 
 export type { SyncLogEntry, SyncReason, SyncResult } from './syncTypes'
 
@@ -54,7 +54,8 @@ export type SyncEvent = 'synced' | 'flushed'
 export type SyncOutcome = Omit<SyncLogEntry, 'id'>
 
 const FULL_REFRESH_MS = 6 * 60 * 60 * 1000
-const LOG_LIMIT = 100
+/** A safety cap on the log; the 24 hours it keeps are what normally bounds it. */
+const LOG_LIMIT = 500
 const PROGRESS_INTERVAL_MS = 100
 const MAX_BACKOFF_MS = 5 * 60 * 1000
 /** Above this many changed tasks, re-reading the whole list is cheaper than per-task reads. */
@@ -346,12 +347,13 @@ export class SyncEngine {
     return { durationMs: Date.now() - startedAt, checked: done, differences }
   }
 
-  /** Closes a run: the log keeps it (a failing log never fails the sync). */
+  /** Closes a run: the log keeps it for 24 hours (a failing log never fails the sync). */
   private async finish(outcome: SyncOutcome): Promise<SyncOutcome> {
     outcome.endedAt = Date.now()
     try {
       const { syncLog } = this.db
       await syncLog.add({ ...outcome })
+      await syncLog.where('startedAt').below(Date.now() - SYNC_LOG_RETENTION_MS).delete()
       const surplus = (await syncLog.count()) - LOG_LIMIT
       if (surplus > 0) await syncLog.bulkDelete(await syncLog.toCollection().limit(surplus).primaryKeys())
     } catch (error) {

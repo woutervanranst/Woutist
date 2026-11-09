@@ -1,6 +1,6 @@
 import type { LiveState } from '../services/sync/liveUpdates'
 import type { SyncProgress, SyncStatus } from '../services/sync/syncEngine'
-import type { SyncLogEntry, SyncReason } from '../services/sync/syncTypes'
+import { SYNC_LOG_RETENTION_MS, type SyncLogEntry, type SyncReason } from '../services/sync/syncTypes'
 
 /** Text and decisions for the sync icon and Settings › Sync. Pure, so they are unit-tested. */
 
@@ -194,4 +194,88 @@ export function logDetails(entry: SyncLogEntry, locale?: string): DetailRow[] {
   rows.push({ text: 'Changes sent', value: String(entry.sent) })
   if (entry.error) rows.push({ text: `Error: ${entry.error}`, tone: 'error' })
   return rows
+}
+
+// ---------- the log, similar runs combined ----------
+
+export interface LogGroup {
+  kind: 'group'
+  /** What the runs in it have in common ("Nothing new", "Failed: No connection"). */
+  summary: string
+  failed: boolean
+  /** At least two runs, newest first. */
+  entries: SyncLogEntry[]
+}
+
+export type LogItem = { kind: 'single'; entry: SyncLogEntry } | LogGroup
+
+/**
+ * What a run has in common with the ones around it, or null when it is worth reading on its own: it changed
+ * something, sent something, or checked everything. Runs that brought nothing share a key, and failures share
+ * one only when they failed the same way.
+ */
+function groupKey(entry: SyncLogEntry): string | null {
+  if (entry.result !== 'ok') return `failed:${logSummary(entry)}`
+  const { changed, removed } = received(entry)
+  if (changed + removed > 0 || entry.sent > 0 || entry.full || entry.fullCheck !== null) return null
+  return 'nothing'
+}
+
+/**
+ * The runs of the last 24 hours, newest first, with consecutive runs that brought nothing (or failed the same
+ * way) combined into one group. A run that did something is never combined.
+ */
+export function groupSyncLog(entries: readonly SyncLogEntry[], now: number): LogItem[] {
+  const cutoff = now - SYNC_LOG_RETENTION_MS
+  const recent = entries
+    .filter((e) => e.startedAt >= cutoff)
+    .sort((a, b) => b.startedAt - a.startedAt || (b.id ?? 0) - (a.id ?? 0))
+  const items: LogItem[] = []
+  let run: SyncLogEntry[] = []
+  let runKey: string | null = null
+  const close = () => {
+    const [only] = run
+    if (run.length === 1 && only) items.push({ kind: 'single', entry: only })
+    else if (only) items.push({ kind: 'group', summary: logSummary(only), failed: only.result !== 'ok', entries: run })
+    run = []
+    runKey = null
+  }
+  for (const entry of recent) {
+    const key = groupKey(entry)
+    if (run.length > 0 && (key === null || key !== runKey)) close()
+    run.push(entry)
+    runKey = key
+    if (key === null) close()
+  }
+  close()
+  return items
+}
+
+/** "09:02–09:30"; the start has its day when it isn't today ("Yesterday 23:50–00:20"). */
+export function groupTimeRange(group: LogGroup, now: number, locale?: string): string {
+  const first = group.entries.at(-1)!.startedAt
+  const last = group.entries[0]!.startedAt
+  const sameDay = startOfDay(new Date(first)).getTime() === startOfDay(new Date(last)).getTime()
+  return `${formatWhen(first, now, { locale })}–${sameDay ? timeOf(new Date(last), locale) : formatWhen(last, now, { locale })}`
+}
+
+/** The distinct reasons the runs started, most frequent first: "Every 5 minutes while open, opened the app". */
+export function groupReasons(group: LogGroup): string {
+  const counts = new Map<SyncReason, number>()
+  for (const entry of group.entries) counts.set(entry.reason, (counts.get(entry.reason) ?? 0) + 1)
+  return [...counts]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason], i) => (i === 0 ? REASONS[reason] : REASONS[reason].charAt(0).toLowerCase() + REASONS[reason].slice(1)))
+    .join(', ')
+}
+
+/** "0.5–1.2 s", or just "0.7 s" when they all took the same. */
+export function groupDurations(group: LogGroup): string {
+  const times = group.entries.map((e) => e.endedAt - e.startedAt)
+  const low = durationText(Math.min(...times))
+  const high = durationText(Math.max(...times))
+  if (low === high) return low
+  return low.endsWith(' s') && !low.includes('min') && high.endsWith(' s') && !high.includes('min')
+    ? `${low.slice(0, -2)}–${high}`
+    : `${low} – ${high}`
 }

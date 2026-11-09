@@ -204,6 +204,47 @@ describe('SyncSettings buttons', () => {
 })
 
 describe('SyncSettings recent syncs', () => {
+  const changed = (n: number) => [{ listId: 'L1', name: 'Tasks', changed: n, removed: 0 }]
+  const openLog = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Recent syncs' }))
+    return await screen.findByRole('dialog', { name: 'Recent syncs' })
+  }
+  /** Five quiet runs, 5 minutes apart, the newest 20 minutes ago. */
+  const quietRuns = (count = 5, patch: Partial<SyncLogEntry> = {}) =>
+    Array.from({ length: count }, (_, i) => entry({ startedAt: Date.now() - (20 + 5 * (count - 1 - i)) * MIN, reason: 'interval', ...patch }))
+
+  it('does not list the syncs in Settings, only a link that opens them', async () => {
+    await db.syncLog.bulkAdd([entry({ lists: changed(4) }), ...quietRuns(2)])
+    renderIt()
+    expect(await screen.findByText(/^On this device/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Recent syncs' })).toBeInTheDocument()
+    expect(screen.queryByText('4 tasks changed')).toBeNull()
+    expect(screen.queryByText('Nothing new')).toBeNull()
+    expect(screen.queryByText(/Kept on this device/)).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('opens the log in a dialog with a caption, and closes back to Settings', async () => {
+    await db.syncLog.add(entry({ lists: changed(4) }))
+    renderIt()
+    const dialog = await openLog()
+    expect(within(dialog).getByText('Syncs from the last 24 hours, kept on this device.')).toBeInTheDocument()
+    expect(await within(dialog).findByText('4 tasks changed')).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Recent syncs' })).toBeInTheDocument()
+  })
+
+  it('says when there is nothing in the last 24 hours', async () => {
+    await db.syncLog.add(entry({ startedAt: Date.now() - 25 * 60 * MIN, lists: changed(4) }))
+    renderIt()
+    const dialog = await openLog()
+    expect(await within(dialog).findByText('No syncs in the last 24 hours.')).toBeInTheDocument()
+    expect(within(dialog).queryByText('4 tasks changed')).toBeNull()
+  })
+
   it('lists the runs newest first, with what came in, why, and how long', async () => {
     const startedAt20 = Date.now() - 20 * MIN
     await db.syncLog.bulkAdd([
@@ -218,7 +259,8 @@ describe('SyncSettings recent syncs', () => {
       entry({ startedAt: Date.now() - 10 * MIN, reason: 'manual', sent: 3 }),
     ])
     renderIt()
-    const rows = await screen.findAllByRole('button', { name: /nothing new|task|failed/i })
+    const dialog = await openLog()
+    const rows = await within(dialog).findAllByRole('button', { name: /nothing new|task|failed/i })
     expect(rows.map((r) => r.textContent)).toEqual([
       expect.stringContaining('3 changes sent, nothing new'),
       expect.stringContaining('23 tasks changed, 2 removed'),
@@ -228,12 +270,76 @@ describe('SyncSettings recent syncs', () => {
     expect(rows[1]).toHaveTextContent('Opened the app · checked everything')
     expect(rows[1]).toHaveTextContent('41 s')
     expect(rows[2]).toHaveTextContent('Every 5 minutes while open')
+    expect(rows[2]).not.toHaveTextContent('syncs')
   })
 
-  it('shows a failure with its reason', async () => {
-    await db.syncLog.add(entry({ result: 'offline', error: 'Failed to fetch' }))
+  it('combines similar runs into one row, and splits it at a run that did something', async () => {
+    // Five quiet runs, then (newer) one with changes, then two more quiet ones.
+    await db.syncLog.bulkAdd([
+      ...quietRuns(5).map((e) => ({ ...e, startedAt: e.startedAt - 10 * MIN, endedAt: e.startedAt - 10 * MIN + 700 })),
+      entry({ startedAt: Date.now() - 15 * MIN, lists: changed(2) }),
+      entry({ startedAt: Date.now() - 10 * MIN, reason: 'visible' }),
+      entry({ startedAt: Date.now() - 5 * MIN, reason: 'visible' }),
+    ])
     renderIt()
-    expect(await screen.findByText('Failed: Failed to fetch')).toBeInTheDocument()
+    const dialog = await openLog()
+    const rows = await within(dialog).findAllByRole('button', { name: /nothing new|task/i })
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringMatching(/Nothing new · 2 syncs.*Came back to the app/),
+      expect.stringContaining('2 tasks changed'),
+      expect.stringMatching(/Nothing new · 5 syncs.*Every 5 minutes while open.*0\.7 s/),
+    ])
+    expect(within(dialog).queryByText('Nothing new')).toBeNull()
+  })
+
+  it('shows the time range of a group', async () => {
+    await db.syncLog.bulkAdd(quietRuns(3))
+    renderIt()
+    const dialog = await openLog()
+    const group = await within(dialog).findByRole('button', { name: /3 syncs/ })
+    const time = (minutesAgo: number) =>
+      new Date(Date.now() - minutesAgo * MIN).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    expect(group).toHaveTextContent(`${time(30)}–${time(20)}`)
+  })
+
+  it('lists the runs of a group when it is tapped', async () => {
+    await db.syncLog.bulkAdd([
+      ...quietRuns(4, { reason: 'interval' }).map((e, i) => (i === 0 ? { ...e, reason: 'startup' as const, endedAt: e.startedAt + 1200 } : e)),
+    ])
+    renderIt()
+    const dialog = await openLog()
+    const group = await within(dialog).findByRole('button', { name: /4 syncs/ })
+    expect(group).toHaveAttribute('aria-expanded', 'false')
+    expect(within(dialog).queryByText(/Opened the app · /)).toBeNull()
+    fireEvent.click(group)
+    expect(group).toHaveAttribute('aria-expanded', 'true')
+    const lines = within(dialog).getAllByTestId('group-run').map((l) => l.textContent)
+    expect(lines).toHaveLength(4)
+    expect(lines[0]).toMatch(/^\d\d:\d\d.* · Every 5 minutes while open · 0\.7 s$/)
+    expect(lines[3]).toMatch(/^\d\d:\d\d.* · Opened the app · 1\.2 s$/)
+    expect(within(dialog).queryByText('Requests to Microsoft')).toBeNull()
+    fireEvent.click(group)
+    expect(within(dialog).queryAllByTestId('group-run')).toHaveLength(0)
+  })
+
+  it('shows a lone quiet run like any other row', async () => {
+    await db.syncLog.add(entry())
+    renderIt()
+    const dialog = await openLog()
+    const row = await within(dialog).findByRole('button', { name: /Nothing new/ })
+    expect(row).not.toHaveTextContent('syncs')
+  })
+
+  it('shows a failure with its reason, and combines identical failures', async () => {
+    await db.syncLog.bulkAdd([
+      entry({ startedAt: Date.now() - 30 * MIN, result: 'offline', error: 'No connection' }),
+      entry({ startedAt: Date.now() - 25 * MIN, result: 'offline', error: 'No connection' }),
+      entry({ startedAt: Date.now() - 20 * MIN, result: 'offline', error: 'Failed to fetch' }),
+    ])
+    renderIt()
+    const dialog = await openLog()
+    expect(await within(dialog).findByText('Failed: Failed to fetch')).toBeInTheDocument()
+    expect(within(dialog).getByText('Failed: No connection · 2 syncs')).toBeInTheDocument()
   })
 
   it('opens the details of a run when it is tapped', async () => {
@@ -250,7 +356,8 @@ describe('SyncSettings recent syncs', () => {
       }),
     )
     renderIt()
-    const row = await screen.findByRole('button', { name: /task/ })
+    const dialog = await openLog()
+    const row = await within(dialog).findByRole('button', { name: /task/ })
     expect(row).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Requests to Microsoft')).toBeNull()
     fireEvent.click(row)
@@ -264,11 +371,12 @@ describe('SyncSettings recent syncs', () => {
     expect(screen.queryByText('Requests to Microsoft')).toBeNull()
   })
 
-  it('shows new runs as they are written, and says how many are kept', async () => {
+  it('shows new runs as they are written while it is open', async () => {
     renderIt()
-    expect(await screen.findByText('No syncs yet.')).toBeInTheDocument()
-    expect(screen.getByText('Kept on this device: the last 100 syncs.')).toBeInTheDocument()
-    await db.syncLog.add(entry())
-    await waitFor(() => expect(screen.getByText('Nothing new')).toBeInTheDocument())
+    const dialog = await openLog()
+    expect(await within(dialog).findByText('No syncs in the last 24 hours.')).toBeInTheDocument()
+    await db.syncLog.add(entry({ lists: changed(1) }))
+    await waitFor(() => expect(within(dialog).getByText('1 task received')).toBeInTheDocument())
+    expect(within(dialog).queryByText('No syncs in the last 24 hours.')).toBeNull()
   })
 })

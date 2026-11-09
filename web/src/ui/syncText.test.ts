@@ -6,6 +6,10 @@ import {
   describeSync,
   durationText,
   formatWhen,
+  groupDurations,
+  groupReasons,
+  groupSyncLog,
+  groupTimeRange,
   logDetails,
   logSummary,
   manualToast,
@@ -297,5 +301,119 @@ describe('statusLine', () => {
   it('leaves out what is not known', () => {
     expect(statusLine(status({ lastSyncAt: at(8, 17, 45), lastFullSyncAt: null }), NOW, L)).toBe('Synced yesterday 17:45')
     expect(statusLine(status({ lastSyncAt: null, lastFullSyncAt: null }), NOW, L)).toBe('Never synced on this device')
+  })
+})
+
+describe('groupSyncLog', () => {
+  // Quiet runs at 09:02, 09:10, ... today; the gaps are what matters, so each one takes `ms`.
+  const quiet = (id: number, startedAt: number, patch: Partial<SyncLogEntry> = {}) =>
+    entry({ id, startedAt, endedAt: startedAt + 700, reason: 'interval', ...patch })
+  const changed = (n: number) => [{ listId: 'L1', name: 'Tasks', changed: n, removed: 0 }]
+
+  it('combines consecutive nothing-new runs into one group, newest first', () => {
+    const runs = [
+      quiet(1, at(9, 9, 2), { endedAt: at(9, 9, 2) + 500, reason: 'startup' }),
+      quiet(2, at(9, 9, 10)),
+      quiet(3, at(9, 9, 20), { endedAt: at(9, 9, 20) + 1200 }),
+      quiet(4, at(9, 9, 25)),
+      quiet(5, at(9, 9, 30), { reason: 'visible' }),
+    ]
+    const items = groupSyncLog(runs, NOW)
+    expect(items).toHaveLength(1)
+    const group = items[0]!
+    expect(group.kind).toBe('group')
+    if (group.kind !== 'group') return
+    expect(group.summary).toBe('Nothing new')
+    expect(group.entries.map((e) => e.id)).toEqual([5, 4, 3, 2, 1])
+    expect(group.entries).toHaveLength(5)
+    expect(groupTimeRange(group, NOW, L)).toBe('09:02–09:30')
+    expect(groupReasons(group)).toBe('Every 5 minutes while open, came back to the app, opened the app')
+    expect(groupDurations(group)).toBe('0.5–1.2 s')
+  })
+
+  it('does not care in which order the runs are given', () => {
+    const runs = [quiet(1, at(9, 9, 2)), quiet(2, at(9, 9, 10)), quiet(3, at(9, 9, 20))]
+    const items = groupSyncLog([runs[1]!, runs[2]!, runs[0]!], NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.kind === 'group' && items[0]!.entries.map((e) => e.id)).toEqual([3, 2, 1])
+  })
+
+  it('splits groups at a run that changed something, and never groups that run', () => {
+    const runs = [
+      quiet(1, at(9, 9, 0)),
+      quiet(2, at(9, 9, 5)),
+      quiet(3, at(9, 9, 10), { lists: changed(2) }),
+      quiet(4, at(9, 9, 15)),
+      quiet(5, at(9, 9, 20)),
+      quiet(6, at(9, 9, 25), { lists: changed(1) }),
+    ]
+    const items = groupSyncLog(runs, NOW)
+    expect(items.map((i) => i.kind)).toEqual(['single', 'group', 'single', 'group'])
+    expect(items.map((i) => (i.kind === 'single' ? i.entry.id : i.entries.map((e) => e.id)))).toEqual([6, [5, 4], 3, [2, 1]])
+  })
+
+  it('never groups a run that removed or sent something, or ran the full check', () => {
+    const runs = [
+      quiet(1, at(9, 9, 0), { lists: [{ listId: 'L1', name: 'T', changed: 0, removed: 1 }] }),
+      quiet(2, at(9, 9, 5), { sent: 1 }),
+      quiet(3, at(9, 9, 10), { full: true }),
+      quiet(4, at(9, 9, 15), { fullCheck: { durationMs: 1000, checked: 10, differences: 0 } }),
+      quiet(5, at(9, 9, 20), { reason: 'manual-full', full: true }),
+    ]
+    const items = groupSyncLog(runs, NOW)
+    expect(items.map((i) => i.kind)).toEqual(['single', 'single', 'single', 'single', 'single'])
+  })
+
+  it('merges identical failures and keeps different ones apart', () => {
+    const fail = (id: number, minute: number, error: string) =>
+      quiet(id, at(9, 9, minute), { result: 'offline', error })
+    const items = groupSyncLog(
+      [fail(1, 0, 'No connection'), fail(2, 5, 'No connection'), fail(3, 10, 'Failed to fetch'), fail(4, 15, 'No connection'), fail(5, 20, 'No connection')],
+      NOW,
+    )
+    expect(items.map((i) => (i.kind === 'single' ? i.entry.id : i.entries.map((e) => e.id)))).toEqual([[5, 4], 3, [2, 1]])
+    const first = items[0]!
+    expect(first.kind === 'group' && first.summary).toBe('Failed: No connection')
+  })
+
+  it('does not merge a failure with a quiet run', () => {
+    const items = groupSyncLog([quiet(1, at(9, 9, 0)), quiet(2, at(9, 9, 5), { result: 'offline' }), quiet(3, at(9, 9, 10))], NOW)
+    expect(items.map((i) => i.kind)).toEqual(['single', 'single', 'single'])
+  })
+
+  it('shows a lone quiet run as a single row', () => {
+    const items = groupSyncLog([quiet(1, at(9, 9, 0))], NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'single', entry: { id: 1 } })
+  })
+
+  it('leaves out runs more than 24 hours old', () => {
+    const runs = [
+      quiet(1, NOW - 25 * 60 * MIN),
+      quiet(2, NOW - 24 * 60 * MIN - 1),
+      quiet(3, NOW - 24 * 60 * MIN, { lists: changed(1) }),
+      quiet(4, NOW - MIN),
+    ]
+    const items = groupSyncLog(runs, NOW)
+    expect(items.map((i) => (i.kind === 'single' ? i.entry.id : 'group'))).toEqual([4, 3])
+    expect(groupSyncLog([quiet(1, NOW - 30 * 60 * MIN)], NOW)).toEqual([])
+  })
+
+  it('shows the start with its day when the group began before today', () => {
+    const items = groupSyncLog([quiet(1, at(8, 23, 50)), quiet(2, at(9, 0, 10)), quiet(3, at(9, 0, 20))], NOW)
+    const group = items[0]!
+    expect(group.kind).toBe('group')
+    if (group.kind !== 'group') return
+    expect(groupTimeRange(group, NOW, L)).toBe('Yesterday 23:50–00:20')
+  })
+
+  it('shows one duration when they are all the same', () => {
+    const group = groupSyncLog([quiet(1, at(9, 9, 0)), quiet(2, at(9, 9, 5))], NOW)[0]!
+    expect(group.kind === 'group' && groupDurations(group)).toBe('0.7 s')
+  })
+
+  it('writes both units when the durations differ in unit', () => {
+    const group = groupSyncLog([quiet(1, at(9, 9, 0), { endedAt: at(9, 9, 0) + 41_000 }), quiet(2, at(9, 9, 5), { endedAt: at(9, 9, 5) + 65_000 })], NOW)[0]!
+    expect(group.kind === 'group' && groupDurations(group)).toBe('41 s – 1 min 5 s')
   })
 })

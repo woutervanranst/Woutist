@@ -586,28 +586,46 @@ describe('SyncEngine sync log', () => {
     expect((await db.tasks.get('quiet'))?.title).toBe('added quietly')
   })
 
-  it('keeps only the newest 100 runs', async () => {
+  const oldRun = (startedAt: number, reason: 'interval' | 'startup' = 'interval') => ({
+    startedAt,
+    endedAt: startedAt,
+    reason,
+    full: false,
+    result: 'ok' as const,
+    lists: [],
+    changesMs: 0,
+    fullCheck: null,
+    sent: 0,
+    requests: 0,
+  })
+  const HOUR = 60 * 60 * 1000
+
+  it('keeps the runs of the last 24 hours and drops the older ones', async () => {
     fake.addList('L')
-    await db.syncLog.bulkAdd(
-      Array.from({ length: 105 }, (_, i) => ({
-        startedAt: i,
-        endedAt: i,
-        reason: 'interval' as const,
-        full: false,
-        result: 'ok' as const,
-        lists: [],
-        changesMs: 0,
-        fullCheck: null,
-        sent: 0,
-        requests: 0,
-      })),
-    )
+    const now = Date.now()
+    await db.syncLog.bulkAdd([
+      oldRun(now - 30 * HOUR),
+      oldRun(now - 24 * HOUR - 60_000),
+      oldRun(now - 23 * HOUR, 'startup'),
+      oldRun(now - 2 * HOUR),
+    ])
     await engine.sync({ reason: 'manual' })
 
     const entries = await logs()
-    expect(entries).toHaveLength(100)
+    expect(entries.map((e) => e.reason)).toEqual(['startup', 'interval', 'manual'])
+    expect(entries.every((e) => e.startedAt >= now - 24 * HOUR)).toBe(true)
+  })
+
+  it('caps the log at 500 runs, dropping the oldest', async () => {
+    fake.addList('L')
+    const now = Date.now()
+    await db.syncLog.bulkAdd(Array.from({ length: 505 }, (_, i) => oldRun(now - 10 * HOUR + i)))
+    await engine.sync({ reason: 'manual' })
+
+    const entries = await logs()
+    expect(entries).toHaveLength(500)
     expect(entries.at(-1)!.reason).toBe('manual')
-    expect(entries[0]!.startedAt).toBe(6) // runs 0-5 are gone
+    expect(entries[0]!.startedAt).toBe(now - 10 * HOUR + 6) // the 6 oldest are gone
   })
 
   it('records failures with their message, and offline runs as offline', async () => {
@@ -627,6 +645,17 @@ describe('SyncEngine sync log', () => {
     const listId = fake.addList('L')
     fake.addTask(listId, { title: 'a' })
     vi.spyOn(db.syncLog, 'add').mockRejectedValue(new Error('quota exceeded'))
+    await expect(engine.sync({ reason: 'manual' })).resolves.toMatchObject({ result: 'ok' })
+    expect(engine.getStatus().state).toBe('idle')
+    expect(await db.tasks.count()).toBe(1)
+  })
+
+  it('does not fail the sync when old runs cannot be removed', async () => {
+    const listId = fake.addList('L')
+    fake.addTask(listId, { title: 'a' })
+    vi.spyOn(db.syncLog, 'where').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
     await expect(engine.sync({ reason: 'manual' })).resolves.toMatchObject({ result: 'ok' })
     expect(engine.getStatus().state).toBe('idle')
     expect(await db.tasks.count()).toBe(1)

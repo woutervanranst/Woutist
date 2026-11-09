@@ -12,7 +12,7 @@ Everything Woutist keeps for itself is disposable:
 |---|---|---|
 | Lists, tasks, steps, attachments, reminders | Microsoft Graph | Permanent; the official app sees it |
 | Offline cache + outbox of pending changes | IndexedDB (Dexie), one DB per account: `woutist-<homeAccountId>` | Deleted on sign-out |
-| Sync log: what each sync did and why (Settings > Sync) | IndexedDB, table `syncLog` | The last 100 runs; deleted on sign-out |
+| Sync log: what each sync did and why (Settings > Sync) | IndexedDB, table `syncLog` | The last 24 hours of runs (capped at 500); deleted on sign-out. Settings > Sync opens it in its own dialog (*Recent syncs*), with similar runs combined |
 | UI preferences (theme, sort, visible smart lists) | `localStorage`, per account | Deleted on sign-out |
 | Quick dates, reminder times, reminder rule | `localStorage`, plus an open extension on the default list in Graph | The local copy is deleted on sign-out; the extension stays with the account |
 | Push subscriptions, reminder schedule, timer cursor, phones' FCM tokens | Azure Table Storage (Function App's storage account) | Derived from Graph; removable from Settings |
