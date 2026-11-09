@@ -436,6 +436,91 @@ describe('SyncEngine push', () => {
   })
 })
 
+describe('SyncEngine push: reordering steps', () => {
+  const names = (steps: { displayName?: string | null }[]) => steps.map((s) => s.displayName)
+
+  async function syncedTask(steps: string[]) {
+    const listId = fake.addList('L')
+    const taskId = fake.addTask(listId, { title: 'T', checklistItems: steps.map((displayName) => ({ displayName })) })
+    await engine.sync({ reason: 'manual' })
+    return { listId, taskId }
+  }
+
+  it('puts the steps on Graph in the new order and keeps the ones before the move', async () => {
+    const { listId, taskId } = await syncedTask(['a', 'b', 'c', 'd'])
+    const [a] = (await db.tasks.get(taskId))!.steps
+    const b = (await db.tasks.get(taskId))!.steps[1]
+
+    await repo.reorderSteps(taskId, b.id, 3) // a c d b
+    expect(names((await db.tasks.get(taskId))!.steps)).toEqual(['a', 'c', 'd', 'b'])
+    await engine.flush()
+
+    expect(names(fake.task(listId, taskId)!.checklistItems)).toEqual(['a', 'c', 'd', 'b'])
+    const local = (await db.tasks.get(taskId))!.steps
+    expect(local.map((s) => s.id)).toEqual(fake.task(listId, taskId)!.checklistItems.map((s) => s.id))
+    expect(local[0].id).toBe(a.id) // untouched, not re-created
+    expect(writes().filter((r) => r.method === 'DELETE')).toHaveLength(3) // b, c, d
+  })
+
+  it('moves a step up and keeps whether it is checked', async () => {
+    const { listId, taskId } = await syncedTask(['a', 'b', 'c'])
+    const c = (await db.tasks.get(taskId))!.steps[2]
+    await repo.updateStep(taskId, c.id, { isChecked: true })
+    await engine.flush()
+    const checked = (await db.tasks.get(taskId))!.steps[2]
+
+    await repo.reorderSteps(taskId, checked.id, 0)
+    await engine.flush()
+
+    const server = fake.task(listId, taskId)!.checklistItems
+    expect(names(server)).toEqual(['c', 'a', 'b'])
+    expect(server.map((s) => s.isChecked)).toEqual([true, false, false])
+  })
+
+  it('does nothing when the step stays where it is', async () => {
+    const { taskId } = await syncedTask(['a', 'b'])
+    const [a] = (await db.tasks.get(taskId))!.steps
+    await repo.reorderSteps(taskId, a.id, 0)
+    expect(await db.outbox.count()).toBe(0)
+  })
+
+  it('reorders steps that are not on Graph yet without deleting anything there', async () => {
+    const { listId, taskId } = await syncedTask(['a'])
+    await repo.addStep(taskId, 'b')
+    await repo.addStep(taskId, 'c')
+    const b = (await db.tasks.get(taskId))!.steps[1]
+
+    await repo.reorderSteps(taskId, b.id, 2) // a c b
+    await engine.flush()
+
+    expect(names(fake.task(listId, taskId)!.checklistItems)).toEqual(['a', 'c', 'b'])
+    expect(writes().filter((r) => r.method === 'DELETE')).toHaveLength(0)
+  })
+
+  it('drops queued edits of a replaced step and keeps the edit in the new copy', async () => {
+    const { listId, taskId } = await syncedTask(['a', 'b'])
+    const [a] = (await db.tasks.get(taskId))!.steps
+    await repo.updateStep(taskId, a.id, { displayName: 'a2' })
+    await repo.reorderSteps(taskId, a.id, 1)
+    await engine.flush()
+
+    expect(names(fake.task(listId, taskId)!.checklistItems)).toEqual(['b', 'a2'])
+  })
+
+  it('a pull while the reorder is waiting does not bring the old steps back', async () => {
+    const { listId, taskId } = await syncedTask(['a', 'b', 'c'])
+    const [a] = (await db.tasks.get(taskId))!.steps
+    await repo.reorderSteps(taskId, a.id, 2) // b c a, queued
+    fake.serverUpdate(listId, taskId, { title: 'Server edit' })
+
+    await engine.pullTasks(listId)
+
+    expect(names((await db.tasks.get(taskId))!.steps)).toEqual(['b', 'c', 'a'])
+    await engine.flush()
+    expect(names(fake.task(listId, taskId)!.checklistItems)).toEqual(['b', 'c', 'a'])
+  })
+})
+
 describe('SyncEngine sync log', () => {
   const logs = () => db.syncLog.orderBy('id').toArray()
   const lastLog = async () => (await logs()).at(-1)!
