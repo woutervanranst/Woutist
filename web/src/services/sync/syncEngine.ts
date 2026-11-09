@@ -540,23 +540,31 @@ export class SyncEngine {
   }
 
   /**
-   * Delta items normally include their (expanded) steps. Should Graph ever return items without a
-   * `checklistItems` collection, re-read those tasks so local steps aren't wiped.
+   * Delta is requested with `$expand=checklistItems,linkedResources`, so tasks that have steps arrive with them.
+   * Graph omits the key for a task without steps (verified, see docs/graph-api-notes.md), so a missing
+   * `checklistItems` means "no steps" and costs nothing. The exception is a task whose local copy has synced
+   * steps: it may have lost them elsewhere, or the deltaLink may have lost its `$expand`, so only those tasks
+   * are re-read (one by one, or the whole list when there are many).
    */
   private async withSteps(listId: string, tasks: GraphTodoTask[]): Promise<GraphTodoTask[]> {
-    const missing = tasks.filter((t) => !Array.isArray(t.checklistItems)).map((t) => t.id!)
-    if (missing.length === 0) return tasks
+    const stepless = tasks.filter((t) => !Array.isArray(t.checklistItems)).map((t) => t.id!)
+    if (stepless.length === 0) return tasks
+    const local = await this.db.tasks.bulkGet(stepless)
+    const stale = stepless.filter((_, i) => local[i]?.steps.some((s) => !isTempId(s.id)))
+    if (stale.length === 0) return tasks
     let refetched: GraphTodoTask[]
-    if (missing.length > PER_TASK_FETCH_LIMIT) {
-      const wanted = new Set(missing)
+    if (stale.length > PER_TASK_FETCH_LIMIT) {
+      const wanted = new Set(stale)
       refetched = (await this.svc.getTasks(listId)).filter((t) => wanted.has(t.id!))
     } else {
-      refetched = (await mapLimit(missing, 4, (id) => this.svc.getTask(listId, id))).filter(
+      refetched = (await mapLimit(stale, 4, (id) => this.svc.getTask(listId, id))).filter(
         (t): t is GraphTodoTask => t !== null,
       )
     }
+    const staleIds = new Set(stale)
     const byId = new Map(refetched.map((t) => [t.id!, t]))
-    return tasks.flatMap((t) => (Array.isArray(t.checklistItems) ? [t] : byId.has(t.id!) ? [byId.get(t.id!)!] : []))
+    // A re-read task that is gone (404) is dropped; the others keep what delta gave us.
+    return tasks.flatMap((t) => (staleIds.has(t.id!) ? (byId.has(t.id!) ? [byId.get(t.id!)!] : []) : [t]))
   }
 
   private async replaceListTasks(listId: string, server: GraphTodoTask[]) {

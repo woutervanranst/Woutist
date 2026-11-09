@@ -53,7 +53,7 @@ describe('SyncEngine pull', () => {
     expect(engine.getStatus().state).toBe('idle')
   })
 
-  it('picks up changes made in another client via delta, re-reading steps', async () => {
+  it('picks up changes made in another client via delta, including steps', async () => {
     const listId = fake.addList('L')
     const taskId = fake.addTask(listId, { title: 'Before' })
     await engine.sync()
@@ -100,6 +100,131 @@ describe('SyncEngine pull', () => {
     await engine.sync()
     expect((await db.tasks.get(taskId))?.title).toBe('Local')
     expect(await db.outbox.count()).toBe(1)
+  })
+})
+
+describe('SyncEngine pull: tasks without steps', () => {
+  // Graph omits `checklistItems` for a task without steps, so a missing key means "no steps" (not "not included").
+  const taskReads = (since = 0) =>
+    fake.requests
+      .slice(since)
+      .filter(
+        (r) =>
+          r.method === 'GET' &&
+          /\/tasks(\/[^/]+)?$/.test(r.url.pathname) &&
+          !r.url.pathname.endsWith('/tasks/delta'),
+      )
+      .map((r) => r.url.pathname.split('/lists/')[1]!)
+  const deltaCalls = (since = 0) =>
+    fake.requests.slice(since).filter((r) => r.method === 'GET' && r.url.pathname.endsWith('/tasks/delta'))
+
+  it('does not re-read many changed tasks without steps', async () => {
+    const listId = fake.addList('L')
+    const ids = Array.from({ length: 30 }, (_, i) => fake.addTask(listId, { title: `t${i}` }))
+    await engine.sync()
+
+    for (const id of ids) fake.serverUpdate(listId, id, { title: 'changed' })
+    const before = fake.requests.length
+    await engine.sync()
+
+    expect(taskReads(before)).toEqual([])
+    expect(deltaCalls(before)).toHaveLength(1)
+    expect((await db.tasks.get(ids[7]!))?.title).toBe('changed')
+  })
+
+  it('does not read a few changed tasks without steps one by one', async () => {
+    const listId = fake.addList('L')
+    const ids = [1, 2, 3].map((i) => fake.addTask(listId, { title: `t${i}` }))
+    await engine.sync()
+
+    for (const id of ids) fake.serverUpdate(listId, id, { title: 'changed' })
+    const before = fake.requests.length
+    await engine.sync()
+
+    expect(taskReads(before)).toEqual([])
+    expect((await db.tasks.get(ids[0]!))?.title).toBe('changed')
+  })
+
+  it('re-reads a task with synced local steps that arrives without any (steps deleted elsewhere)', async () => {
+    const listId = fake.addList('L')
+    const withSteps = fake.addTask(listId, {
+      title: 'Steps',
+      checklistItems: [{ displayName: 'a', isChecked: false }],
+    })
+    const stepless = fake.addTask(listId, { title: 'Plain' })
+    await engine.sync()
+    expect((await db.tasks.get(withSteps))?.steps).toHaveLength(1)
+
+    fake.serverUpdate(listId, withSteps, { title: 'Steps gone', checklistItems: [] })
+    fake.serverUpdate(listId, stepless, { title: 'Plain 2' })
+    const before = fake.requests.length
+    await engine.sync()
+
+    expect(taskReads(before)).toEqual([`${listId}/tasks/${withSteps}`])
+    expect(await db.tasks.get(withSteps)).toMatchObject({ title: 'Steps gone', steps: [] })
+    expect((await db.tasks.get(stepless))?.title).toBe('Plain 2')
+  })
+
+  it('re-reads the whole list once when many tasks with synced steps arrive without any', async () => {
+    const listId = fake.addList('L')
+    const ids = Array.from({ length: 25 }, (_, i) =>
+      fake.addTask(listId, { title: `t${i}`, checklistItems: [{ displayName: 's', isChecked: false }] }),
+    )
+    await engine.sync()
+
+    for (const id of ids) fake.serverUpdate(listId, id, { checklistItems: [] })
+    const before = fake.requests.length
+    await engine.sync()
+
+    expect(taskReads(before)).toEqual([`${listId}/tasks`])
+    expect((await db.tasks.where('listId').equals(listId).toArray()).flatMap((t) => t.steps)).toEqual([])
+  })
+
+  it('keeps unsynced local steps when the task arrives without steps, without re-reading', async () => {
+    const listId = fake.addList('L')
+    const taskId = fake.addTask(listId, { title: 'T' })
+    await engine.sync()
+    fake.failNext('POST', /checklistItems$/, 0, 1) // network down for the push
+    await repo.addStep(taskId, 'local only')
+    await engine.flush()
+    const [tempStep] = (await db.tasks.get(taskId))!.steps
+    expect(tempStep?.id).toMatch(/^tmp/)
+
+    fake.serverUpdate(listId, taskId, { title: 'Server edit' })
+    const before = fake.requests.length
+    await engine.pullTasks(listId)
+
+    expect(taskReads(before)).toEqual([])
+    expect(await db.tasks.get(taskId)).toMatchObject({ steps: [{ displayName: 'local only' }] })
+  })
+
+  it('a full refresh reads each list once', async () => {
+    const a = fake.addList('A')
+    const b = fake.addList('B')
+    for (let i = 0; i < 30; i++) fake.addTask(a, { title: `a${i}` })
+    for (let i = 0; i < 3; i++) fake.addTask(b, { title: `b${i}` })
+    await engine.sync()
+
+    const before = fake.requests.length
+    await engine.sync({ full: true })
+
+    expect(taskReads(before)).toEqual([])
+    expect(deltaCalls(before)).toHaveLength(2)
+    expect(await db.tasks.count()).toBe(33)
+  })
+
+  it('the first sync reads each list once, and a full refresh drops tasks deleted elsewhere', async () => {
+    const listId = fake.addList('L')
+    const keep = fake.addTask(listId, { title: 'keep' })
+    const gone = fake.addTask(listId, { title: 'gone' })
+    const before = fake.requests.length
+    await engine.sync()
+    expect(taskReads(before)).toEqual([])
+
+    fake.serverDeleteTask(listId, gone)
+    await engine.sync({ full: true })
+    expect(await db.tasks.get(gone)).toBeUndefined()
+    expect(await db.tasks.get(keep)).toBeDefined()
   })
 })
 

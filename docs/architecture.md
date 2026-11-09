@@ -42,7 +42,7 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
    - Other 4xx responses drop the op and restore the server's version.
 4. Pull:
    - Lists are read in full.
-   - Tasks use **delta queries** per list. Changed tasks are re-read with `$expand=checklistItems,linkedResources`, because delta doesn't include steps.
+   - Tasks use **delta queries** per list. Delta is requested with `$expand=checklistItems,linkedResources`, so changed tasks arrive with their steps. A task without the key has no steps. It is re-read only when the local copy has synced steps (they may have been deleted elsewhere).
    - A full refresh runs on first sync and every 6 hours.
    - **Server data never overwrites an entity with unsynced local changes.**
    - **Categories** are the one exception to the outbox: Settings > Categories (`CategoryService`) writes Outlook master categories straight to Graph, online only, so a failure shows in the dialog. Tasks hold category names as plain strings, so renaming or deleting a category also rewrites the tasks that carry it, and those edits do go through the outbox. Graph won't rename a category: `PATCH displayName` answers success but keeps the old name. So a rename sends the PATCH, trusts it only if the returned name matches, and otherwise creates the new category, re-tags the tasks and deletes the old one. Needs `MailboxSettings.ReadWrite`.

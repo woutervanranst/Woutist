@@ -208,7 +208,15 @@ export class FakeGraph {
         }
       }
 
-    const taskOut = (t: StoredTask) => ({ ...t, linkedResources: t.linkedResources ?? [] })
+    // Like real Graph (measured 2026-11-09): `checklistItems` and `linkedResources` are omitted when empty.
+    const taskOut = (t: StoredTask, { steps = true }: { steps?: boolean } = {}) => {
+      const { checklistItems, linkedResources, ...rest } = t
+      return {
+        ...rest,
+        ...(steps && checklistItems.length ? { checklistItems } : {}),
+        ...(linkedResources?.length ? { linkedResources } : {}),
+      }
+    }
     const getTask = (p: Record<string, string>) => {
       const t = this.list(p.listId).tasks.get(p.taskId)
       if (!t) throw new NotFound()
@@ -297,14 +305,13 @@ export class FakeGraph {
         const ids = token
           ? [...new Set(this.changes.filter((c) => c.listId === params.listId && c.seq > token).map((c) => c.taskId))]
           : [...l.tasks.keys()]
-        // Like real Graph: steps are included when $expand was requested (and the deltaLink keeps it).
+        // Like real Graph: steps are included when $expand was requested (and the deltaLink keeps it),
+        // and the key is omitted for tasks without steps.
         const expand = url.searchParams.get('$expand')
         const items = ids.map((id) => {
           const t = l.tasks.get(id)
           if (!t) return { id, '@removed': { reason: 'deleted' } }
-          if (expand?.includes('checklistItems')) return t
-          const { checklistItems: _omit, ...rest } = t
-          return rest
+          return taskOut(t, { steps: !!expand?.includes('checklistItems') })
         })
         const link = new URL(`${BASE}/me/todo/lists/${params.listId}/tasks/delta`)
         link.searchParams.set('$deltatoken', String(this.seq))
@@ -312,7 +319,7 @@ export class FakeGraph {
         return this.page(items, url, { '@odata.deltaLink': link.toString() })
       })),
       http.get(`${BASE}/me/todo/lists/:listId/tasks`, wrap('GET', ({ params, url }) =>
-        this.page([...this.list(params.listId).tasks.values()].map(taskOut), url),
+        this.page([...this.list(params.listId).tasks.values()].map((t) => taskOut(t)), url),
       )),
       http.post(`${BASE}/me/todo/lists/:listId/tasks`, wrap('POST', ({ params, body }) => {
         const id = this.addTask(params.listId, body as TodoTask & { title: string })
