@@ -14,6 +14,8 @@ export interface RealtimeOptions {
   onSignal: (signal: SyncSignal) => void
   /** After a dropped connection is back: signals sent in between were missed, so sync everything. */
   onReconnect: () => void
+  /** The connection opened (true) or closed, dropped or was shut on purpose (false). */
+  onConnectionChange?: (connected: boolean) => void
   createSocket?: (url: string) => SocketLike
   isVisible?: () => boolean
 }
@@ -60,6 +62,7 @@ export class RealtimeClient {
 
   constructor(opts: RealtimeOptions) {
     this.opts = {
+      onConnectionChange: () => {},
       createSocket: browserSocket,
       isVisible: () => document.visibilityState === 'visible',
       ...opts,
@@ -104,8 +107,14 @@ export class RealtimeClient {
       })
   }
 
+  private setOpen(open: boolean) {
+    if (open === this.isOpen) return
+    this.isOpen = open
+    this.opts.onConnectionChange(open)
+  }
+
   private opened() {
-    this.isOpen = true
+    this.setOpen(true)
     this.failures = 0
     if (this.dropped) {
       this.dropped = false
@@ -127,7 +136,7 @@ export class RealtimeClient {
   /** The connection closed (or never opened) without us asking: retry with exponential backoff. */
   private lost() {
     this.socket = null
-    this.isOpen = false
+    this.setOpen(false)
     this.dropped = true
     if (!this.running || !this.opts.isVisible()) return
     this.failures++
@@ -144,7 +153,7 @@ export class RealtimeClient {
     this.retryTimer = null
     const socket = this.socket
     this.socket = null
-    this.isOpen = false
+    this.setOpen(false)
     this.dropped = false
     this.failures = 0
     if (socket) {

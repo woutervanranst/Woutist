@@ -47,9 +47,10 @@ class WoutistAuthPlugin : Plugin() {
         val token = if (call.getBoolean("interactive", false) == true) {
             AuthManager.tokenInteractive(activity, scopes)
         } else {
-            AuthManager.tokenSilent(scopes)
+            AuthManager.tokenSilentWithExpiry(scopes)
         }
-        JSObject().put("accessToken", token)
+        // `expiresOn` lets the WebView reuse the token until it nears expiry (see nativeAuth.tsx).
+        JSObject().put("accessToken", token.accessToken).put("expiresOn", token.expiresOn)
     }
 
     private fun run(call: PluginCall, block: suspend () -> JSObject) {

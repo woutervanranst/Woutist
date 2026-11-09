@@ -1,20 +1,28 @@
 import type { SyncSignal } from '@woutist/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EnsureResult } from './graphSubscriptions'
-import type { SyncEvent } from './syncEngine'
+import type { SyncEvent, SyncOptions } from './syncEngine'
+import { LiveUpdates } from './liveUpdates'
 import { SyncSignals } from './syncSignals'
 
 const HOUR = 60 * 60 * 1000
 
-let syncCalls: { lists?: readonly string[] }[]
+let syncCalls: SyncOptions[]
 let syncedListeners: Set<(e: SyncEvent) => void>
 let ensureCalls: string[][]
 let ensureFails: boolean
 let listIds: string[]
-let realtime: { onSignal?: (s: SyncSignal) => void; onReconnect?: () => void; started: boolean }
+let realtime: {
+  onSignal?: (s: SyncSignal) => void
+  onReconnect?: () => void
+  onConnectionChange?: (connected: boolean) => void
+  started: boolean
+}
+let live: LiveUpdates
 let nowMs: number
 let signals: SyncSignals
 let accountCounter = 0
+let accountKey: string
 
 const emit = (e: SyncEvent) => syncedListeners.forEach((l) => l(e))
 const settle = () => vi.advanceTimersByTimeAsync(0)
@@ -28,10 +36,13 @@ beforeEach(() => {
   listIds = ['L1', 'L2']
   realtime = { started: false }
   nowMs = Date.parse('2026-11-06T10:00:00.000Z')
+  live = new LiveUpdates(true)
+  accountKey = `acct-${++accountCounter}`
   signals = new SyncSignals({
-    accountKey: `acct-${++accountCounter}`,
+    accountKey,
+    live,
     engine: {
-      sync: async (options = {}) => {
+      sync: async (options) => {
         syncCalls.push(options)
       },
       on: (listener) => {
@@ -79,12 +90,12 @@ describe('SyncSignals', () => {
     await vi.advanceTimersByTimeAsync(299)
     expect(syncCalls).toEqual([])
     await vi.advanceTimersByTimeAsync(1)
-    expect(syncCalls).toEqual([{ lists: ['L1', 'L2'] }])
+    expect(syncCalls).toEqual([{ reason: 'signal', lists: ['L1', 'L2'] }])
   })
 
   it('syncs everything after the connection comes back', () => {
     realtime.onReconnect!()
-    expect(syncCalls).toEqual([{}])
+    expect(syncCalls).toEqual([{ reason: 'reconnect' }])
   })
 
   it('ensures Graph subscriptions after a sync, then at most every 12 hours', async () => {
@@ -136,5 +147,46 @@ describe('SyncSignals', () => {
     emit('synced')
     await settle()
     expect(ensureCalls).toEqual([])
+  })
+
+  describe('live updates status', () => {
+    it('is on while the connection is open and the subscriptions are fine', async () => {
+      expect(live.getState().state).toBe('off')
+      realtime.onConnectionChange!(true)
+      emit('synced')
+      await settle()
+      expect(live.getState()).toEqual({ state: 'on' })
+      realtime.onConnectionChange!(false)
+      expect(live.getState().state).toBe('off')
+    })
+
+    it('is off when the subscriptions could not be updated', async () => {
+      ensureFails = true
+      realtime.onConnectionChange!(true)
+      emit('synced')
+      await settle()
+      expect(live.getState()).toMatchObject({ state: 'off', reason: expect.stringContaining('Microsoft') })
+    })
+
+    it('remembers a good update from an earlier session', async () => {
+      emit('synced')
+      await settle()
+      signals.stop()
+      // A new session: the stored record says the subscriptions were fine, so no new update is needed.
+      const next = new LiveUpdates(true)
+      const again = new SyncSignals({
+        accountKey,
+        live: next,
+        engine: { sync: async () => ({}) as never, on: () => () => {} },
+        listIds: async () => listIds,
+        subscriptions: { ensure: async () => ({ created: 0, renewed: 0, deleted: 0, failed: 0 }) },
+        createRealtime: () => ({ start() {}, stop() {} }),
+        now: () => nowMs,
+      })
+      again.start()
+      next.setConnection(true)
+      expect(next.getState()).toEqual({ state: 'on' })
+      again.stop()
+    })
   })
 })

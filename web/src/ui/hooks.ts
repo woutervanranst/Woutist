@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router'
 import { useServices } from '../app/AppServices'
 import { usePrefs } from '../app/prefs'
@@ -9,7 +9,9 @@ import { todayLocal } from '../models/time'
 import type { Task, TodoList } from '../models/todo'
 import { orderLists } from '../models/views'
 import type { AttachmentRecord, CategoryRecord } from '../services/db'
+import type { LiveState } from '../services/sync/liveUpdates'
 import type { SyncStatus } from '../services/sync/syncEngine'
+import { type SyncDescription, describeSync, shouldDimList } from './syncText'
 
 export function useLists(): TodoList[] | undefined {
   const { db } = useServices()
@@ -54,6 +56,47 @@ export function useAttachments(taskId: string | null): AttachmentRecord[] {
 export function useSyncStatus(): SyncStatus {
   const { engine } = useServices()
   return useSyncExternalStore(engine.subscribe, engine.getStatus)
+}
+
+/** Whether this device gets near-instant sync signals. */
+export function useLiveUpdates(): LiveState {
+  const { live } = useServices()
+  return useSyncExternalStore(live.subscribe, live.getState)
+}
+
+/**
+ * True while the list should look unconfirmed (see `shouldDimList`). A boolean snapshot, so only the
+ * component using it re-renders when the status changes, not on every sync progress step.
+ */
+export function useListDimmed(): boolean {
+  const { engine } = useServices()
+  return useSyncExternalStore(engine.subscribe, () => shouldDimList(engine.getStatus(), Date.now()))
+}
+
+/**
+ * What the sync icon and Settings › Sync say right now. "Up to date" lapses by itself (after 5 minutes without
+ * live updates), so this looks again at that moment and whenever the app returns to the foreground (timers
+ * sleep in the background).
+ */
+export function useSyncDescription(): { status: SyncStatus; live: LiveState; sync: SyncDescription; now: number } {
+  const status = useSyncStatus()
+  const live = useLiveUpdates()
+  const [seen, setNow] = useState(() => Date.now())
+  // A sync that ended after the time last looked at is, of course, in the past.
+  const now = Math.max(seen, status.lastSyncAt ?? 0)
+  const sync = describeSync(status, live, now)
+  const { lapsesAt } = sync
+  useEffect(() => {
+    const refresh = () => setNow(Date.now())
+    document.addEventListener('visibilitychange', refresh)
+    // setTimeout can't wait longer than ~24 days.
+    const timer = lapsesAt === null ? null : setTimeout(refresh, Math.min(Math.max(lapsesAt - Date.now(), 0) + 50, 2 ** 31 - 1))
+    return () => {
+      document.removeEventListener('visibilitychange', refresh)
+      if (timer) clearTimeout(timer)
+    }
+  }, [lapsesAt])
+  return { status, live, sync, now }
 }
 
 export function useAccountPrefs() {

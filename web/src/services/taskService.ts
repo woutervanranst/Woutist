@@ -47,16 +47,34 @@ export class TaskService {
     this.prefer = `outlook.timezone="${timeZone}"`
   }
 
-  private api(path: string) {
-    return this.client.api(path).header('Prefer', this.prefer)
+  /** HTTP requests made to Graph so far (also counts nextLink pages). Callers diff it around a piece of work. */
+  get requestCount(): number {
+    return this.requests
+  }
+  private requests = 0
+
+  /** Every request starts here, so it is counted once. */
+  private raw(path: string) {
+    this.requests++
+    return this.client.api(path)
   }
 
-  private async collect<T>(first: Page<T>): Promise<{ items: T[]; deltaLink?: string }> {
+  private api(path: string) {
+    return this.raw(path).header('Prefer', this.prefer)
+  }
+
+  /** Reads all pages. `onPage` gets the number of items of each page as it arrives. */
+  private async collect<T>(
+    first: Page<T>,
+    onPage?: (count: number) => void,
+  ): Promise<{ items: T[]; deltaLink?: string }> {
     const items = [...first.value]
+    onPage?.(first.value.length)
     let page = first
     while (page['@odata.nextLink']) {
       page = (await this.api(page['@odata.nextLink']).get()) as Page<T>
       items.push(...page.value)
+      onPage?.(page.value.length)
     }
     return { items, deltaLink: page['@odata.deltaLink'] }
   }
@@ -147,14 +165,18 @@ export class TaskService {
    * Incremental changes to a list's tasks. Pass the previous deltaLink, or nothing for an initial
    * round (which returns every task and a deltaLink to continue from).
    */
-  async tasksDelta(listId: string, deltaLink?: string): Promise<DeltaResult<TodoTask>> {
+  async tasksDelta(
+    listId: string,
+    deltaLink?: string,
+    onPage?: (count: number) => void,
+  ): Promise<DeltaResult<TodoTask>> {
     // $expand is honoured by delta and carried over in the deltaLink, so changed tasks arrive with
     // their steps (verified against the live API, see docs/graph-api-notes.md).
     const first = (await (deltaLink
       ? this.api(deltaLink)
       : this.api(`/me/todo/lists/${enc(listId)}/tasks/delta`).expand(TASK_EXPAND)
     ).get()) as Page<Removable<TodoTask>>
-    const { items, deltaLink: next } = await this.collect(first)
+    const { items, deltaLink: next } = await this.collect(first, onPage)
     return splitDelta(items, next)
   }
 
@@ -162,20 +184,20 @@ export class TaskService {
 
   /** This app's change-notification subscriptions for the signed-in user. */
   async listSubscriptions(): Promise<Subscription[]> {
-    const first = (await this.client.api('/subscriptions').get()) as Page<Subscription>
+    const first = (await this.raw('/subscriptions').get()) as Page<Subscription>
     return (await this.collect(first)).items
   }
 
   async createSubscription(subscription: Subscription): Promise<Subscription> {
-    return (await this.client.api('/subscriptions').post(subscription)) as Subscription
+    return (await this.raw('/subscriptions').post(subscription)) as Subscription
   }
 
   async renewSubscription(id: string, expirationDateTime: string): Promise<void> {
-    await this.client.api(`/subscriptions/${enc(id)}`).patch({ expirationDateTime })
+    await this.raw(`/subscriptions/${enc(id)}`).patch({ expirationDateTime })
   }
 
   async deleteSubscription(id: string): Promise<void> {
-    await this.client.api(`/subscriptions/${enc(id)}`).delete()
+    await this.raw(`/subscriptions/${enc(id)}`).delete()
   }
 
   async listsDelta(deltaLink?: string): Promise<DeltaResult<TodoTaskList>> {
@@ -254,6 +276,7 @@ export class TaskService {
     let last: Response | null = null
     for (let start = 0; start < file.size; start += UPLOAD_CHUNK) {
       const end = Math.min(start + UPLOAD_CHUNK, file.size)
+      this.requests++
       last = await fetch(session.uploadUrl, {
         method: 'PUT',
         headers: {
@@ -276,12 +299,12 @@ export class TaskService {
   // ---------- profile & categories ----------
 
   getMe(): Promise<User> {
-    return this.client.api('/me').select('id,displayName,mail,userPrincipalName').get()
+    return this.raw('/me').select('id,displayName,mail,userPrincipalName').get()
   }
 
   async getMyPhoto(): Promise<Blob | null> {
     try {
-      return await this.client.api('/me/photo/$value').responseType(ResponseType.BLOB).get()
+      return await this.raw('/me/photo/$value').responseType(ResponseType.BLOB).get()
     } catch {
       return null // no photo, or not supported for this account type
     }
@@ -289,7 +312,7 @@ export class TaskService {
 
   async getCategories(): Promise<OutlookCategory[]> {
     try {
-      const first = (await this.client.api('/me/outlook/masterCategories').get()) as Page<OutlookCategory>
+      const first = (await this.raw('/me/outlook/masterCategories').get()) as Page<OutlookCategory>
       return (await this.collect(first)).items
     } catch {
       return [] // mailbox not available for this account: categories still work as plain names
@@ -298,16 +321,16 @@ export class TaskService {
 
   // The writes throw on purpose: Settings shows the error. Graph answers 409 for a duplicate name.
   createCategory(displayName: string, color: string): Promise<OutlookCategory> {
-    return this.client.api('/me/outlook/masterCategories').post({ displayName, color })
+    return this.raw('/me/outlook/masterCategories').post({ displayName, color })
   }
 
   /** `displayName` is documented as immutable on Graph; callers fall back to create + delete when it's refused. */
   updateCategory(id: string, patch: { displayName?: string; color?: string }): Promise<OutlookCategory> {
-    return this.client.api(`/me/outlook/masterCategories/${enc(id)}`).patch(patch)
+    return this.raw(`/me/outlook/masterCategories/${enc(id)}`).patch(patch)
   }
 
   async deleteCategory(id: string): Promise<void> {
-    await this.client.api(`/me/outlook/masterCategories/${enc(id)}`).delete()
+    await this.raw(`/me/outlook/masterCategories/${enc(id)}`).delete()
   }
 }
 

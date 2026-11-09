@@ -12,6 +12,7 @@ Everything Woutist keeps for itself is disposable:
 |---|---|---|
 | Lists, tasks, steps, attachments, reminders | Microsoft Graph | Permanent; the official app sees it |
 | Offline cache + outbox of pending changes | IndexedDB (Dexie), one DB per account: `woutist-<homeAccountId>` | Deleted on sign-out |
+| Sync log: what each sync did and why (Settings > Sync) | IndexedDB, table `syncLog` | The last 24 hours of runs (capped at 500); deleted on sign-out. Settings > Sync opens it in its own dialog (*Recent syncs*), with similar runs combined |
 | UI preferences (theme, sort, visible smart lists) | `localStorage`, per account | Deleted on sign-out |
 | Quick dates, reminder times, reminder rule | `localStorage`, plus an open extension on the default list in Graph | The local copy is deleted on sign-out; the extension stays with the account |
 | Push subscriptions, reminder schedule, timer cursor, phones' FCM tokens | Azure Table Storage (Function App's storage account) | Derived from Graph; removable from Settings |
@@ -42,11 +43,19 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
    - Other 4xx responses drop the op and restore the server's version.
 4. Pull:
    - Lists are read in full.
-   - Tasks use **delta queries** per list. Changed tasks are re-read with `$expand=checklistItems,linkedResources`, because delta doesn't include steps.
-   - A full refresh runs on first sync and every 6 hours.
+   - Tasks use **delta queries** per list. Delta is requested with `$expand=checklistItems,linkedResources`, so changed tasks arrive with their steps. A task without the key has no steps. It is re-read only when the local copy has synced steps (they may have been deleted elsewhere).
+   - A **full check** runs on first sync, every 6 hours and when asked (Settings > Sync > *Check everything*). It reads every task again and compares it with the local copy. The tasks that differ are counted in the sync log: anything above 0 means the quick sync had missed something.
+   - Every sync starts with the **quick pass**: delta for each list (a list without a delta link is read in full). When a full check is due, it runs *after* the quick pass, so changes land in seconds even when the check takes a minute. The status stays `syncing` through both and carries progress: lists done in the quick pass, then tasks received in the full check (the total is estimated from the local copy, and grows if more arrive).
    - **Server data never overwrites an entity with unsynced local changes.**
    - **Categories** are the one exception to the outbox: Settings > Categories (`CategoryService`) writes Outlook master categories straight to Graph, online only, so a failure shows in the dialog. Tasks hold category names as plain strings, so renaming or deleting a category also rewrites the tasks that carry it, and those edits do go through the outbox. Graph won't rename a category: `PATCH displayName` answers success but keeps the old name. So a rename sends the PATCH, trusts it only if the returned name matches, and otherwise creates the new category, re-tags the tasks and deletes the old one. Needs `MailboxSettings.ReadWrite`.
-5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change. A **sync signal** (see [Near-instant sync](#near-instant-sync)) pulls just the lists it names, within a second or two of the change.
+5. Sync runs at start-up, every 5 minutes while visible, on focus and when coming back online, and shortly after each local change. A **sync signal** (see [Near-instant sync](#near-instant-sync)) pulls just the lists it names, within a second or two of the change. Every run knows its reason (opened, came back, every 5 minutes, back online, you tapped sync, you asked to check everything, change on another device, live connection restored). A run queued behind a running one keeps the most significant reason: a tap beats the background ones.
+6. The last sync and the last full check are kept in `meta` (`lastSyncAt`, `lastFullSyncAt`), so after a restart the app still knows how current it is.
+
+**The header icon** says only what the app knows:
+
+- A progress ring around the sync arrows while syncing. Tapping it says what is running ("Getting changes · 7 of 12 lists", "Checking everything · 1,240 of 8,316 tasks") with a link to Settings > Sync. It starts nothing.
+- Resting, in this order: *Sync problem*, *Offline*, *N changes to send*, then *Up to date* (cloud with a checkmark) when the last sync succeeded and is under 5 minutes old, or when live updates are on. Otherwise a cloud with a clock says *Last synced Fri 17:45*, and *Not synced yet* before the first success. A checkmark never shows before a sync has succeeded.
+- Tapping it otherwise syncs, and a toast says what that found. When you open or return to the app after more than 5 minutes, the task list is dimmed until the quick pass is done.
 
 ### Dates and reminders
 
@@ -90,6 +99,7 @@ Graph ──change notification──► POST /api/graph-notify/<user>/<v>
 - **The notification URL** carries the user key and a fingerprint of `GRAPH_HOOK_SECRET`. Rotating the secret therefore changes the URL: devices create new subscriptions, and the old ones (with the old `clientState`) expire unrenewed. Subscriptions of other environments (a dev tunnel, say) have other URLs and are left alone.
 - **Web.** While the page is visible, `RealtimeClient` holds a WebSocket to Azure Web PubSub (`GET /api/realtime` returns a URL for the user, which can't publish). Signals within 300 ms are merged into one targeted sync. A dropped connection is retried with backoff, and a full sync follows once it's back. Hidden pages disconnect; they sync when shown again anyway. Polling stays as the safety net.
 - **Android.** The app registers its FCM token (`PUT /api/devices`, removed on sign-out or when FCM says it's gone). A high-priority data message starts an expedited `RefreshWorker` run, so the widget and reminder alarms follow even with the app closed. It also tells the running app to sync.
+- **Live updates status.** Settings > Sync says whether this device gets signals: *on* while the web page's connection is open (on the phone: the FCM token is registered) and the last subscription update worked; *off*, with the reason (for example "Couldn't register this phone: Failed to fetch"), and then polling is all there is; *not available* in the demo and without the API. The header icon stays "Up to date" beyond 5 minutes only while this is on.
 - **The device that made the change** gets the signal too. That costs one delta request that finds nothing.
 
 Latency measured on 2026-11-06 (personal account): changes through Graph arrived 0.4–1.5 s later, and an edit in the official app arrived well within 37 s.
@@ -122,6 +132,7 @@ The API runs on a **standalone Flex Consumption Function App**. SWA "bring your 
 The same React app runs in a Capacitor 8 shell. Two builds install side by side: **Woutist** (release, `com.wouteronarchitecture.woutist`) and **Woutist dev** (debug, `….debug`). On the phone (`isNative`):
 
 - **Sign-in** is MSAL Android in single-account mode, through Microsoft Authenticator when installed (`WoutistAuth` plugin behind the `AuthAdapter` seam). Graph tokens are silent, with one shared interactive prompt when MSAL needs it.
+  The JS side caches each native token until 5 minutes before it expires, because a silent call through the broker takes about 0.8 s.
 - **No Web Push.** Reminders are scheduled on the phone instead.
 
 **Snapshot bridge.** After local changes (debounced 1 s) the app pushes a compact snapshot to native code (`WoutistNative.setSnapshot`): lists, open tasks with server ids (title, star, due date, reminder instant, recurring), the tasks completed today (kept apart, with their completion date, for the Today widget), sort preferences, quick dates and reminder times, and whether the outbox still holds unsent changes. Native code keeps it in files (`SnapshotStore`) plus its own **pending operations** (complete, create) made from notifications, the widget or quick add. Its view is the snapshot with those operations applied.

@@ -30,7 +30,7 @@ beforeEach(async () => {
   fake.addTask(listId, { title: 'A', categories: ['Red category'] })
   fake.addTask(listId, { title: 'B', categories: ['Red category', 'Other'] })
   fake.addTask(listId, { title: 'C', categories: [] })
-  await engine.sync()
+  await engine.sync({ reason: 'manual' })
 })
 afterEach(() => {
   engine.stop()

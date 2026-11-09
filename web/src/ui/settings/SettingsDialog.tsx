@@ -16,13 +16,13 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components'
-import type { ReactNode } from 'react'
-import { useServices } from '../../app/AppServices'
+import { type ReactNode, useCallback } from 'react'
 import type { ThemePref } from '../../app/prefs'
 import { SMART_LISTS } from '../../models/views'
 import { useAccountPrefs } from '../hooks'
 import { CategorySettings } from './CategorySettings'
 import { DateReminderSettings } from './DateReminderSettings'
+import { SyncSettings } from './SyncSettings'
 
 const useStyles = makeStyles({
   section: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS, marginBottom: tokens.spacingVerticalL },
@@ -33,12 +33,20 @@ interface Props {
   onClose: () => void
   /** Extra sections (notifications) contributed by other modules. */
   extra?: ReactNode
+  /** Open scrolled to this section (the sync icon's Details link). */
+  scrollTo?: 'sync' | null | undefined
 }
 
-export function SettingsDialog({ open, onClose, extra }: Props) {
+export function SettingsDialog({ open, onClose, extra, scrollTo }: Props) {
   const styles = useStyles()
   const [prefs, update] = useAccountPrefs()
-  const { engine } = useServices()
+  // A callback ref: the dialog's content mounts a moment after `open` turns true.
+  const syncSection = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element && scrollTo === 'sync') element.scrollIntoView?.({ block: 'start' })
+    },
+    [scrollTo],
+  )
 
   return (
     <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
@@ -71,9 +79,10 @@ export function SettingsDialog({ open, onClose, extra }: Props) {
                 checked={prefs.confirmDelete}
                 onChange={(_, d) => update((p) => ({ ...p, confirmDelete: d.checked }))}
               />
-              <Button appearance="secondary" onClick={() => void engine.sync({ full: true })}>
-                Sync everything now
-              </Button>
+            </div>
+            <Divider />
+            <div ref={syncSection} style={{ marginTop: 16 }}>
+              <SyncSettings />
             </div>
             {extra}
             <Divider />

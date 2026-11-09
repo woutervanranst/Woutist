@@ -40,7 +40,7 @@ export class NativeBridge {
     this.cleanups.push(() => sub.unsubscribe())
     this.cleanups.push(engine.on(() => this.schedule()))
     this.cleanups.push(subscribePrefs(() => this.schedule()))
-    const changed = WoutistNative.addListener('changed', () => void engine.sync())
+    const changed = WoutistNative.addListener('changed', () => void engine.sync({ reason: 'signal' }))
     this.cleanups.push(() => void changed.then((h) => h.remove()))
     this.askForNotificationsOnce()
   }

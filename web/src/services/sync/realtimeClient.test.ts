@@ -31,6 +31,7 @@ class FakeSocket implements SocketLike {
 let visible: boolean
 let signals: SyncSignal[]
 let reconnects: number
+let connection: boolean[]
 let urlCalls: number
 let client: RealtimeClient
 
@@ -43,11 +44,13 @@ beforeEach(() => {
   visible = true
   signals = []
   reconnects = 0
+  connection = []
   urlCalls = 0
   client = new RealtimeClient({
     getUrl: async () => `wss://pubsub.test/${++urlCalls}`,
     onSignal: (s) => signals.push(s),
     onReconnect: () => reconnects++,
+    onConnectionChange: (connected) => connection.push(connected),
     createSocket: (url) => new FakeSocket(url),
     isVisible: () => visible,
   })
@@ -155,5 +158,25 @@ describe('RealtimeClient', () => {
     expect(latest().closed).toBe(true)
     await vi.advanceTimersByTimeAsync(120_000)
     expect(FakeSocket.all).toHaveLength(1)
+  })
+
+  it('tells when the connection opens, drops, and is closed on purpose', async () => {
+    client.start()
+    await flush()
+    expect(connection).toEqual([])
+    latest().open()
+    latest().drop()
+    await vi.advanceTimersByTimeAsync(1000)
+    latest().open()
+    setVisible(false)
+    expect(connection).toEqual([true, false, true, false])
+  })
+
+  it('does not report a connection that never opened as closed', async () => {
+    client.start()
+    await flush()
+    latest().drop()
+    client.stop()
+    expect(connection).toEqual([])
   })
 })

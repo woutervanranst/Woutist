@@ -1,6 +1,7 @@
 import type { SyncSignal } from '@woutist/contracts'
 import type { EnsureResult } from './graphSubscriptions'
-import type { SyncEngine } from './syncEngine'
+import type { LiveUpdates } from './liveUpdates'
+import type { SyncEngine, SyncOptions } from './syncEngine'
 
 /** Signals for one change often come in a burst (task, then its steps): sync once for all of them. */
 const DEBOUNCE_MS = 300
@@ -16,11 +17,17 @@ interface EnsureRecord {
 
 export interface SyncSignalsOptions {
   accountKey: string
-  engine: Pick<SyncEngine, 'sync' | 'on'>
+  engine: { sync(options: SyncOptions): Promise<unknown>; on: SyncEngine['on'] }
+  /** Told whether the connection is open and the subscriptions are fine. */
+  live?: LiveUpdates
   /** Ids of the lists that exist on the server (no temporary ids). */
   listIds: () => Promise<string[]>
   subscriptions: { ensure(listIds: readonly string[]): Promise<EnsureResult> }
-  createRealtime: (handlers: { onSignal: (s: SyncSignal) => void; onReconnect: () => void }) => {
+  createRealtime: (handlers: {
+    onSignal: (s: SyncSignal) => void
+    onReconnect: () => void
+    onConnectionChange: (connected: boolean) => void
+  }) => {
     start(): void
     stop(): void
   }
@@ -52,8 +59,10 @@ export class SyncSignals {
     if (this.realtime) return
     this.realtime = this.opts.createRealtime({
       onSignal: (signal) => this.queue(signal.listIds),
-      onReconnect: () => void this.opts.engine.sync(),
+      onReconnect: () => void this.opts.engine.sync({ reason: 'reconnect' }),
+      onConnectionChange: (connected) => this.opts.live?.setConnection(connected),
     })
+    this.opts.live?.setSubscriptions(this.readRecord()?.ok ?? null)
     this.realtime.start()
     this.detach = this.opts.engine.on((event) => {
       if (event === 'synced') void this.maybeEnsure()
@@ -77,7 +86,7 @@ export class SyncSignals {
       this.timer = null
       const lists = [...this.pending]
       this.pending.clear()
-      void this.opts.engine.sync({ lists })
+      void this.opts.engine.sync({ reason: 'signal', lists })
     }, DEBOUNCE_MS)
   }
 
@@ -89,7 +98,10 @@ export class SyncSignals {
       const lists = ids.join('\n')
       const last = this.readRecord()
       const now = this.now()
-      if (last && last.lists === lists && now - last.at < (last.ok ? ENSURE_EVERY_MS : RETRY_AFTER_FAILURE_MS)) return
+      if (last && last.lists === lists && now - last.at < (last.ok ? ENSURE_EVERY_MS : RETRY_AFTER_FAILURE_MS)) {
+        this.opts.live?.setSubscriptions(last.ok)
+        return
+      }
       let ok = true
       try {
         const result = await this.opts.subscriptions.ensure(ids)
@@ -98,7 +110,10 @@ export class SyncSignals {
         ok = false
         console.warn('Could not update Graph subscriptions', error)
       }
-      if (this.detach) this.writeRecord({ at: now, lists, ok })
+      if (this.detach) {
+        this.writeRecord({ at: now, lists, ok })
+        this.opts.live?.setSubscriptions(ok)
+      }
     } finally {
       this.ensuring = false
     }

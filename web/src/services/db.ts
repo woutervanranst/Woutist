@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { Step, Task, TaskChanges, TodoList } from '../models/todo'
+import type { SyncLogEntry } from './sync/syncTypes'
 
 /** Attachment metadata (content is fetched on demand; pending uploads keep their blob). */
 export interface AttachmentRecord {
@@ -59,6 +60,8 @@ export class WoutistDb extends Dexie {
   categories!: EntityTable<CategoryRecord, 'displayName'>
   outbox!: EntityTable<OutboxEntry, 'seq'>
   meta!: EntityTable<MetaRecord, 'key'>
+  /** The runs of the sync engine in the last 24 hours. */
+  syncLog!: EntityTable<SyncLogEntry, 'id'>
 
   constructor(name: string) {
     super(name)
@@ -69,6 +72,15 @@ export class WoutistDb extends Dexie {
       categories: 'displayName',
       outbox: '++seq, taskId, listId',
       meta: 'key',
+    })
+    this.version(2).stores({
+      lists: 'id, sortIndex',
+      tasks: 'id, listId, [listId+completed], completed, important, dueDate, reminderAt, createdDateTime',
+      attachments: 'id, taskId',
+      categories: 'displayName',
+      outbox: '++seq, taskId, listId',
+      meta: 'key',
+      syncLog: '++id, startedAt',
     })
   }
 

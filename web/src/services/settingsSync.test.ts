@@ -29,7 +29,7 @@ beforeEach(async () => {
   const svc = new TaskService(createGraphClient(async () => 'token'), 'Europe/Brussels')
   engine = new SyncEngine(db, svc, 'Europe/Brussels')
   settings = new SettingsSync({ db, svc, engine, accountKey })
-  await engine.sync()
+  await engine.sync({ reason: 'manual' })
 })
 afterEach(() => {
   settings.stop()
@@ -110,7 +110,7 @@ describe('SettingsSync', () => {
     editLocally('2026-11-05T10:00:00.000Z')
     await settings.run()
     expect(readPrefs(accountKey).datesDirty).toBe(true)
-    await engine.sync()
+    await engine.sync({ reason: 'manual' })
     await settings.run()
     expect(stored()?.updatedAt).toBe('2026-11-05T10:00:00.000Z')
     expect(readPrefs(accountKey).datesDirty).toBe(false)
