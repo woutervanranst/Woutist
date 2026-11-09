@@ -1,4 +1,21 @@
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   Button,
   Caption1,
   Divider,
@@ -21,7 +38,9 @@ import {
   ToastTitle,
 } from '@fluentui/react-components'
 import { AlertRegular } from '@fluentui/react-icons/svg/alert'
+import { ArrowDownRegular } from '@fluentui/react-icons/svg/arrow-down'
 import { ArrowRepeatAllRegular } from '@fluentui/react-icons/svg/arrow-repeat-all'
+import { ArrowUpRegular } from '@fluentui/react-icons/svg/arrow-up'
 import { AttachRegular } from '@fluentui/react-icons/svg/attach'
 import { CalendarLtrRegular } from '@fluentui/react-icons/svg/calendar-ltr'
 import { CheckmarkCircleFilled } from '@fluentui/react-icons/svg/checkmark-circle'
@@ -32,6 +51,7 @@ import { DocumentRegular } from '@fluentui/react-icons/svg/document'
 import { LinkRegular } from '@fluentui/react-icons/svg/link'
 import { MoreHorizontalRegular } from '@fluentui/react-icons/svg/more-horizontal'
 import { PanelRightContractRegular } from '@fluentui/react-icons/svg/panel-right-contract'
+import { ReOrderDotsVerticalRegular } from '@fluentui/react-icons/svg/re-order-dots-vertical'
 import { StarFilled, StarRegular } from '@fluentui/react-icons/svg/star'
 import { TagRegular } from '@fluentui/react-icons/svg/tag'
 import { useEffect, useRef, useState } from 'react'
@@ -116,6 +136,14 @@ const useStyles = makeStyles({
     marginLeft: '-2px',
     '::after': { display: 'none' },
   },
+  stepDragging: {
+    position: 'relative',
+    zIndex: 1,
+    backgroundColor: tokens.colorNeutralBackground1,
+    boxShadow: tokens.shadow8,
+  },
+  // Only the handle starts a drag, so the text of a step stays selectable and a tap still edits it.
+  stepHandle: { color: tokens.colorNeutralForeground4, cursor: 'grab', touchAction: 'none' },
   newStepIcon: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -384,6 +412,18 @@ function StepsEditor({ task }: { task: Task }) {
     setNewStep(value)
   }
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return
+    const to = task.steps.findIndex((s) => s.id === over.id)
+    if (to >= 0) void repo.reorderSteps(task.id, String(active.id), to)
+  }
+
   function add() {
     const name = pending.current.trim()
     setPending('')
@@ -392,9 +432,19 @@ function StepsEditor({ task }: { task: Task }) {
 
   return (
     <div className={styles.steps}>
-      {task.steps.map((step) => (
-        <StepRow key={`${step.id}:${step.displayName}`} task={task} step={step} />
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={task.steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+          {task.steps.map((step, index) => (
+            <StepRow
+              key={`${step.id}:${step.displayName}`}
+              task={task}
+              step={step}
+              index={index}
+              count={task.steps.length}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
       {/* A form, so the Enter / Go key of any mobile keyboard adds the step (those often don't send a
           usable keydown). Leaving the field with text in it adds the step too. */}
       <form
@@ -423,14 +473,21 @@ function StepsEditor({ task }: { task: Task }) {
   )
 }
 
-function StepRow({ task, step }: { task: Task; step: Step }) {
+function StepRow({ task, step, index, count }: { task: Task; step: Step; index: number; count: number }) {
   const styles = useStyles()
   const { repo } = useServices()
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: step.id,
+  })
   // Keyed by id + name, so an external rename resets this local edit state.
   const [name, setName] = useState(step.displayName)
 
   return (
-    <div className={styles.step}>
+    <div
+      ref={setNodeRef}
+      className={mergeClasses(styles.step, isDragging && styles.stepDragging)}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
       <Button
         className={styles.iconCell}
         appearance="transparent"
@@ -453,6 +510,16 @@ function StepRow({ task, step }: { task: Task; step: Step }) {
         }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
+      <Button
+        ref={setActivatorNodeRef}
+        className={mergeClasses(styles.iconCell, styles.stepHandle)}
+        appearance="transparent"
+        size="small"
+        icon={<ReOrderDotsVerticalRegular />}
+        aria-label="Move step"
+        {...attributes}
+        {...listeners}
+      />
       <Menu>
         <MenuTrigger disableButtonEnhancement>
           <Button
@@ -465,6 +532,16 @@ function StepRow({ task, step }: { task: Task; step: Step }) {
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
+            {index > 0 && (
+              <MenuItem icon={<ArrowUpRegular />} onClick={() => void repo.reorderSteps(task.id, step.id, index - 1)}>
+                Move up
+              </MenuItem>
+            )}
+            {index < count - 1 && (
+              <MenuItem icon={<ArrowDownRegular />} onClick={() => void repo.reorderSteps(task.id, step.id, index + 1)}>
+                Move down
+              </MenuItem>
+            )}
             <MenuItem icon={<DeleteRegular />} onClick={() => void repo.deleteStep(task.id, step.id)}>
               Delete step
             </MenuItem>

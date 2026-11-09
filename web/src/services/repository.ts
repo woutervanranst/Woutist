@@ -281,6 +281,41 @@ export class TodoRepository {
     this.done(undefined)
   }
 
+  /**
+   * Move a step to `toIndex`. Graph has no order field for steps (To Do's own reordering uses a private
+   * endpoint), and steps show in creation order, so every step from the first changed position onward is
+   * deleted and created again in the new order. The steps before it are left alone.
+   */
+  async reorderSteps(taskId: string, stepId: string, toIndex: number): Promise<void> {
+    await this.db.transaction('rw', this.rw, async () => {
+      const task = await this.mustGetTask(taskId)
+      const fromIndex = task.steps.findIndex((s) => s.id === stepId)
+      if (fromIndex < 0) throw new RepositoryError('Step not found')
+      const target = Math.max(0, Math.min(toIndex, task.steps.length - 1))
+      if (target === fromIndex) return
+
+      const reordered = [...task.steps]
+      reordered.splice(target, 0, ...reordered.splice(fromIndex, 1))
+      const first = Math.min(fromIndex, target)
+      const kept = reordered.slice(0, first)
+      const recreated = reordered.slice(first).map((s) => ({ ...s, id: newTempId() }))
+
+      await this.db.tasks.update(taskId, { steps: [...kept, ...recreated] })
+
+      // The old steps of the tail: forget what was queued for them, delete the ones Graph knows.
+      const old = task.steps.filter((s) => reordered.slice(first).some((r) => r.id === s.id))
+      const oldIds = new Set(old.map((s) => s.id))
+      await this.purgeOps((op) => 'stepId' in op && oldIds.has(op.stepId))
+      for (const s of old) {
+        if (!isTempId(s.id)) await this.enqueue({ type: 'step.delete', listId: task.listId, taskId, stepId: s.id })
+      }
+      for (const s of recreated) {
+        await this.enqueue({ type: 'step.create', listId: task.listId, taskId, stepId: s.id })
+      }
+    })
+    this.done(undefined)
+  }
+
   /** Turn a step into a task of its own in the same list. */
   async promoteStep(taskId: string, stepId: string): Promise<string> {
     const task = await this.mustGetTask(taskId)
