@@ -13,19 +13,49 @@ import { userTimeZone } from '../../models/time'
 import type { OutboxEntry, WoutistDb } from '../db'
 import { graphStatus, isNotFound, isTransient } from '../graphClient'
 import type { TaskService } from '../taskService'
+import { sameTask, sameTaskContent } from './taskDiff'
+import { type SyncLogEntry, type SyncReason, strongerReason } from './syncTypes'
+
+export type { SyncLogEntry, SyncReason, SyncResult } from './syncTypes'
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error'
+
+/**
+ * How far a running sync is. The quick pass counts lists; the full check counts tasks (the total is an
+ * estimate from the local copy, and grows when more arrive). `total` 0 means not known yet.
+ */
+export interface SyncProgress {
+  phase: 'changes' | 'full'
+  done: number
+  total: number
+}
 
 export interface SyncStatus {
   state: SyncState
   lastSyncAt: number | null
+  /** When everything was last checked (not only what changed). */
+  lastFullSyncAt: number | null
   pendingChanges: number
   error: string | null
+  progress: SyncProgress | null
+  /** Why the running sync was started; null when none is running. */
+  reason: SyncReason | null
+}
+
+export interface SyncOptions {
+  reason: SyncReason
+  /** Only these lists (a change notification names them). Ignored when a full check is due. */
+  lists?: readonly string[]
 }
 
 export type SyncEvent = 'synced' | 'flushed'
 
+/** What a sync run did (the same record as its log entry). */
+export type SyncOutcome = Omit<SyncLogEntry, 'id'>
+
 const FULL_REFRESH_MS = 6 * 60 * 60 * 1000
+const LOG_LIMIT = 100
+const PROGRESS_INTERVAL_MS = 100
 const MAX_BACKOFF_MS = 5 * 60 * 1000
 /** Above this many changed tasks, re-reading the whole list is cheaper than per-task reads. */
 const PER_TASK_FETCH_LIMIT = 20
@@ -50,12 +80,25 @@ const EDITABLE: (keyof TaskChanges)[] = [
  * Server state never overwrites an entity that still has local changes waiting to be pushed.
  */
 export class SyncEngine {
-  private status: SyncStatus = { state: 'idle', lastSyncAt: null, pendingChanges: 0, error: null }
+  private status: SyncStatus = {
+    state: 'idle',
+    lastSyncAt: null,
+    lastFullSyncAt: null,
+    pendingChanges: 0,
+    error: null,
+    progress: null,
+    reason: null,
+  }
   private statusListeners = new Set<(s: SyncStatus) => void>()
   private eventListeners = new Set<(e: SyncEvent) => void>()
-  private syncPromise: Promise<void> | null = null
-  /** What to sync once the running sync ends: everything, or just these lists. */
-  private syncAgain: { all: true } | { all: false; lists: Set<string> } | null = null
+  private syncPromise: Promise<SyncOutcome> | null = null
+  /** What to sync once the running sync ends: everything, or just these lists; with the strongest reason asked for. */
+  private syncAgain: { lists: Set<string> | null; reason: SyncReason } | null = null
+  private loading: Promise<void> | null = null
+  /** Outbox operations completed so far (a run reports the difference). */
+  private opsCompleted = 0
+  private lastEmitAt = 0
+  private progressTimer: ReturnType<typeof setTimeout> | null = null
   private flushPromise: Promise<void> | null = null
   private flushTimer: ReturnType<typeof setTimeout> | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -65,11 +108,37 @@ export class SyncEngine {
   private readonly db: WoutistDb
   private readonly svc: TaskService
   private readonly tz: string
+  private readonly progressIntervalMs: number
 
-  constructor(db: WoutistDb, svc: TaskService, tz: string = userTimeZone()) {
+  constructor(
+    db: WoutistDb,
+    svc: TaskService,
+    tz: string = userTimeZone(),
+    options: { progressIntervalMs?: number } = {},
+  ) {
     this.db = db
     this.svc = svc
     this.tz = tz
+    this.progressIntervalMs = options.progressIntervalMs ?? PROGRESS_INTERVAL_MS
+  }
+
+  /** Reads when the last (full) sync happened, so the status is right before the first sync of this session ends. */
+  load(): Promise<void> {
+    this.loading ??= (async () => {
+      try {
+        const [lastSyncAt, lastFullSyncAt] = await Promise.all([
+          this.db.getMeta<number>('lastSyncAt'),
+          this.db.getMeta<number>('lastFullSyncAt'),
+        ])
+        await this.setStatus({
+          lastSyncAt: this.status.lastSyncAt ?? lastSyncAt ?? null,
+          lastFullSyncAt: this.status.lastFullSyncAt ?? lastFullSyncAt ?? null,
+        })
+      } catch (error) {
+        console.warn('Reading the last sync time failed', error)
+      }
+    })()
+    return this.loading
   }
 
   // ---------- observable status / events ----------
@@ -89,7 +158,22 @@ export class SyncEngine {
   private async setStatus(patch: Partial<SyncStatus>) {
     const pendingChanges = await this.db.outbox.count()
     this.status = { ...this.status, ...patch, pendingChanges }
+    this.notify()
+  }
+
+  private notify() {
+    if (this.progressTimer) clearTimeout(this.progressTimer)
+    this.progressTimer = null
+    this.lastEmitAt = Date.now()
     for (const l of this.statusListeners) l(this.status)
+  }
+
+  /** Progress changes come in fast (every page): the status changes at once, listeners hear about it at most every 100 ms. */
+  private setProgress(progress: SyncProgress) {
+    this.status = { ...this.status, progress }
+    const wait = this.progressIntervalMs - (Date.now() - this.lastEmitAt)
+    if (wait <= 0) this.notify()
+    else this.progressTimer ??= setTimeout(() => this.notify(), wait)
   }
 
   private emit(event: SyncEvent) {
@@ -102,19 +186,20 @@ export class SyncEngine {
   start(intervalMs = 5 * 60 * 1000): void {
     if (this.detach) return
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void this.sync()
+      if (document.visibilityState === 'visible') void this.sync({ reason: 'visible' })
     }
-    const onOnline = () => void this.sync()
+    const onOnline = () => void this.sync({ reason: 'online' })
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('online', onOnline)
     this.intervalTimer = setInterval(() => {
-      if (document.visibilityState === 'visible') void this.sync()
+      if (document.visibilityState === 'visible') void this.sync({ reason: 'interval' })
     }, intervalMs)
     this.detach = () => {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', onOnline)
     }
-    void this.sync()
+    void this.load()
+    void this.sync({ reason: 'startup' })
   }
 
   stop(): void {
@@ -123,7 +208,8 @@ export class SyncEngine {
     if (this.intervalTimer) clearInterval(this.intervalTimer)
     if (this.flushTimer) clearTimeout(this.flushTimer)
     if (this.retryTimer) clearTimeout(this.retryTimer)
-    this.intervalTimer = this.flushTimer = this.retryTimer = null
+    if (this.progressTimer) clearTimeout(this.progressTimer)
+    this.intervalTimer = this.flushTimer = this.retryTimer = this.progressTimer = null
   }
 
   /** Called by the repository after each local change: push soon (debounced). */
@@ -139,63 +225,139 @@ export class SyncEngine {
   // ---------- full sync ----------
 
   /**
-   * Push pending changes, then pull: every list, or only `lists` (when a change notification names
-   * them). Concurrent calls share one run plus one follow-up covering everything they asked for.
+   * Push pending changes, then pull. The quick pass comes first: what changed in every list, or only in
+   * `lists` (when a change notification names them). When a full check is due (every 6 hours, the first
+   * sync) or asked for, it follows as a second phase. Concurrent calls share the running sync plus one
+   * follow-up covering everything they asked for, under the most significant reason among them.
+   * Resolves with what the run did.
    */
-  sync(options: { full?: boolean; lists?: readonly string[] } = {}): Promise<void> {
+  sync(options: SyncOptions): Promise<SyncOutcome> {
     if (this.syncPromise) {
-      this.queueAgain(options.lists)
+      this.queueAgain(options)
       return this.syncPromise
     }
     this.syncPromise = this.runSync(options).finally(() => {
       this.syncPromise = null
       const again = this.syncAgain
       this.syncAgain = null
-      if (again) void this.sync(again.all ? {} : { lists: [...again.lists] })
+      if (again) void this.sync({ reason: again.reason, ...(again.lists ? { lists: [...again.lists] } : {}) })
     })
     return this.syncPromise
   }
 
-  private queueAgain(lists: readonly string[] | undefined) {
-    if (!lists) {
-      this.syncAgain = { all: true }
-    } else if (!this.syncAgain) {
-      this.syncAgain = { all: false, lists: new Set(lists) }
-    } else if (!this.syncAgain.all) {
-      for (const id of lists) this.syncAgain.lists.add(id)
-    }
-  }
-
-  private async runSync({ full = false, lists }: { full?: boolean; lists?: readonly string[] | undefined }): Promise<void> {
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      await this.setStatus({ state: 'offline' })
+  private queueAgain({ reason, lists }: SyncOptions) {
+    const queued = this.syncAgain
+    if (!queued) {
+      this.syncAgain = { reason, lists: lists ? new Set(lists) : null }
       return
     }
-    await this.setStatus({ state: 'syncing', error: null })
+    queued.reason = strongerReason(queued.reason, reason)
+    if (!lists) queued.lists = null
+    else if (queued.lists) for (const id of lists) queued.lists.add(id)
+  }
+
+  private async runSync({ reason, lists }: SyncOptions): Promise<SyncOutcome> {
+    await this.load()
+    const startedAt = Date.now()
+    const outcome: SyncOutcome = {
+      startedAt,
+      endedAt: startedAt,
+      reason,
+      full: false,
+      result: 'ok',
+      lists: [],
+      changesMs: 0,
+      fullCheck: null,
+      sent: 0,
+      requests: 0,
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      await this.setStatus({ state: 'offline' })
+      return this.finish({ ...outcome, result: 'offline', error: 'No connection' })
+    }
+    const requests0 = this.svc.requestCount
+    const sent0 = this.opsCompleted
+    await this.setStatus({ state: 'syncing', error: null, reason, progress: { phase: 'changes', done: 0, total: 0 } })
     try {
       await this.flush()
       const lastFull = (await this.db.getMeta<number>('lastFullSyncAt')) ?? 0
-      const doFull = full || Date.now() - lastFull > FULL_REFRESH_MS
+      const doFull = reason === 'manual-full' || Date.now() - lastFull > FULL_REFRESH_MS
+      outcome.full = doFull
+      let lastFullSyncAt = this.status.lastFullSyncAt
+
+      // Phase 1, quick: what changed, in every list that is due (a list without a delta link is read in full).
       const listIds = await this.pullLists()
       const pull = lists && !doFull ? await this.listsToPull(listIds, lists) : listIds
-      await mapLimit(pull, PARALLEL_LISTS, (id) => this.pullTasks(id, doFull))
+      const names = new Map((await this.db.lists.bulkGet(pull)).map((l) => [l?.id, l?.displayName]))
+      const readInFull = new Set<string>()
+      let listsDone = 0
+      this.setProgress({ phase: 'changes', done: 0, total: pull.length })
+      outcome.lists = await mapLimit(pull, PARALLEL_LISTS, async (id) => {
+        const result = await this.pullTasks(id)
+        if (result.readInFull) readInFull.add(id)
+        this.setProgress({ phase: 'changes', done: ++listsDone, total: pull.length })
+        return { listId: id, name: names.get(id) ?? id, changed: result.changed, removed: result.removed }
+      })
+      outcome.changesMs = Date.now() - startedAt
+
+      // Phase 2, full: read every list again and compare with the local copy. Lists the quick pass has just read in full are done.
       if (doFull) {
+        outcome.fullCheck = await this.checkEverything(listIds.filter((id) => !readInFull.has(id)))
         await this.pullCategories()
-        await this.db.setMeta('lastFullSyncAt', Date.now())
+        lastFullSyncAt = Date.now()
+        await this.db.setMeta('lastFullSyncAt', lastFullSyncAt)
       }
       await this.flush()
       const failed = await this.db.outbox.filter((op) => op.attempts > 0).count()
-      await this.setStatus({
-        state: failed ? 'offline' : 'idle',
-        lastSyncAt: Date.now(),
-      })
+      const lastSyncAt = Date.now()
+      await this.db.setMeta('lastSyncAt', lastSyncAt)
+      await this.setStatus({ state: failed ? 'offline' : 'idle', lastSyncAt, lastFullSyncAt, progress: null, reason: null })
       this.emit('synced')
     } catch (error) {
-      await this.setStatus({
-        state: isTransient(error) ? 'offline' : 'error',
-        error: describe(error),
-      })
+      outcome.result = isTransient(error) ? 'offline' : 'error'
+      outcome.error = describe(error)
+      await this.setStatus({ state: outcome.result, error: outcome.error, progress: null, reason: null })
     }
+    outcome.sent = this.opsCompleted - sent0
+    outcome.requests = this.svc.requestCount - requests0
+    return this.finish(outcome)
+  }
+
+  /** The full check: every task of `listIds` is read again. Resolves with its duration, size and how many tasks differed. */
+  private async checkEverything(listIds: string[]): Promise<SyncOutcome['fullCheck']> {
+    if (listIds.length === 0) return null
+    const startedAt = Date.now()
+    const counts = await Promise.all(listIds.map((id) => this.db.tasks.where('listId').equals(id).count()))
+    let done = 0
+    let total = counts.reduce((a, b) => a + b, 0)
+    this.setProgress({ phase: 'full', done, total })
+    this.notify()
+    let differences = 0
+    await mapLimit(listIds, PARALLEL_LISTS, async (id) => {
+      const result = await this.pullTasks(id, true, (received) => {
+        done += received
+        total = Math.max(total, done)
+        this.setProgress({ phase: 'full', done, total })
+      })
+      differences += result.changed + result.removed
+    })
+    this.setProgress({ phase: 'full', done, total })
+    this.notify()
+    return { durationMs: Date.now() - startedAt, checked: done, differences }
+  }
+
+  /** Closes a run: the log keeps it (a failing log never fails the sync). */
+  private async finish(outcome: SyncOutcome): Promise<SyncOutcome> {
+    outcome.endedAt = Date.now()
+    try {
+      const { syncLog } = this.db
+      await syncLog.add({ ...outcome })
+      const surplus = (await syncLog.count()) - LOG_LIMIT
+      if (surplus > 0) await syncLog.bulkDelete(await syncLog.toCollection().limit(surplus).primaryKeys())
+    } catch (error) {
+      console.warn('Writing the sync log failed', error)
+    }
+    return outcome
   }
 
   // ---------- push ----------
@@ -220,6 +382,7 @@ export class SyncEngine {
       try {
         await this.execute(op)
         await this.db.outbox.delete(op.seq!)
+        this.opsCompleted++
       } catch (error) {
         if (isNotFound(error)) {
           await this.handleGone(op)
@@ -496,26 +659,31 @@ export class SyncEngine {
     return server.map((l) => l.id!)
   }
 
-  async pullTasks(listId: string, full = false): Promise<void> {
+  /**
+   * Reads a list's tasks: what changed since the stored delta link, or every task (`full`, or when there is
+   * no link yet). `onItems` hears how many tasks each page held. Resolves with how many tasks differed from
+   * the local copy (new, changed, gone), and whether the whole list was read.
+   */
+  async pullTasks(listId: string, full = false, onItems?: (count: number) => void): Promise<PullResult> {
     const key = `delta:tasks:${listId}`
     const link = full ? undefined : await this.db.getMeta<string>(key)
     if (!link) {
       // Initial round: every task (with steps) plus a deltaLink to continue from.
-      const initial = await this.svc.tasksDelta(listId)
-      await this.replaceListTasks(listId, await this.withSteps(listId, initial.changed))
+      const initial = await this.svc.tasksDelta(listId, undefined, onItems)
+      const result = await this.replaceListTasks(listId, await this.withSteps(listId, initial.changed))
       await this.db.setMeta(key, initial.deltaLink)
-      return
+      return { ...result, readInFull: true }
     }
 
     let delta
     try {
-      delta = await this.svc.tasksDelta(listId, link)
+      delta = await this.svc.tasksDelta(listId, link, onItems)
     } catch (error) {
       const status = graphStatus(error)
       if (status === 410 || status === 400) {
         // Delta token expired or invalid: start over with a full read.
         await this.db.meta.delete(key)
-        return this.pullTasks(listId, true)
+        return this.pullTasks(listId, true, onItems)
       }
       throw error
     }
@@ -527,16 +695,28 @@ export class SyncEngine {
     )
 
     const { db } = this
+    const result = { changed: 0, removed: 0 }
     await db.transaction('rw', [db.tasks, db.attachments, db.outbox, db.meta], async () => {
-      for (const t of fresh) await db.tasks.put(this.mergeServerTask(t, listId, await db.tasks.get(t.id!)))
+      for (const t of fresh) await this.storeIfDifferent(t, listId, result)
       for (const id of delta.removedIds) {
         // Deleted on the server: a delete wins over unsynced local edits.
+        if (await db.tasks.get(id)) result.removed++
         await db.tasks.delete(id)
         await db.attachments.where('taskId').equals(id).delete()
         await db.outbox.where('taskId').equals(id).delete()
       }
       await db.setMeta(key, delta.deltaLink)
     })
+    return { ...result, readInFull: false }
+  }
+
+  /** Stores a server task, counting it when it is new or differs from the local copy (the time it was modified aside: an edit made here comes back with Graph's time). */
+  private async storeIfDifferent(server: GraphTodoTask, listId: string, counts: { changed: number }) {
+    const local = await this.db.tasks.get(server.id!)
+    const next = this.mergeServerTask(server, listId, local)
+    if (local && sameTask(local, next)) return
+    if (!local || !sameTaskContent(local, next)) counts.changed++
+    await this.db.tasks.put(next)
   }
 
   /**
@@ -567,22 +747,25 @@ export class SyncEngine {
     return tasks.flatMap((t) => (staleIds.has(t.id!) ? (byId.has(t.id!) ? [byId.get(t.id!)!] : []) : [t]))
   }
 
-  private async replaceListTasks(listId: string, server: GraphTodoTask[]) {
+  private async replaceListTasks(listId: string, server: GraphTodoTask[]): Promise<{ changed: number; removed: number }> {
     const pending = await this.pendingIds()
     const serverIds = new Set(server.map((t) => t.id!))
     const { db } = this
+    const result = { changed: 0, removed: 0 }
     await db.transaction('rw', [db.tasks, db.attachments], async () => {
       for (const t of server) {
         if (pending.tasks.has(t.id!)) continue
-        await db.tasks.put(this.mergeServerTask(t, listId, await db.tasks.get(t.id!)))
+        await this.storeIfDifferent(t, listId, result)
       }
       const localIds = (await db.tasks.where('listId').equals(listId).primaryKeys()) as string[]
       for (const id of localIds) {
         if (serverIds.has(id) || isTempId(id) || pending.tasks.has(id)) continue
         await db.tasks.delete(id)
         await db.attachments.where('taskId').equals(id).delete()
+        result.removed++
       }
     })
+    return result
   }
 
   /** Server task → local record, keeping steps that haven't been pushed yet. */
@@ -640,6 +823,14 @@ export class SyncEngine {
   downloadAttachment(listId: string, taskId: string, attachmentId: string): Promise<Blob> {
     return this.svc.downloadAttachment(listId, taskId, attachmentId)
   }
+}
+
+/** What reading a list's tasks changed locally. */
+interface PullResult {
+  changed: number
+  removed: number
+  /** Every task of the list was read (not just what changed). */
+  readInFull: boolean
 }
 
 function diffEditable(before: Task, after: Task): TaskChanges {

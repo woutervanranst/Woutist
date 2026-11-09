@@ -9,6 +9,7 @@ import { SyncEngine } from '../services/sync/syncEngine'
 import { GraphSubscriptions } from '../services/sync/graphSubscriptions'
 import { RealtimeClient } from '../services/sync/realtimeClient'
 import { SyncSignals } from '../services/sync/syncSignals'
+import { LiveUpdates } from '../services/sync/liveUpdates'
 import { TaskService } from '../services/taskService'
 import { PushApi } from '../services/push/pushApi'
 import { PushController } from '../services/push/pushController'
@@ -33,6 +34,8 @@ export interface AppServices {
   push: PushController | null
   /** Near-instant sync from Graph change notifications; null without the API (or in the demo). */
   signals: SyncSignals | null
+  /** Whether this device gets near-instant sync signals ("unavailable" without the API, and in the demo). */
+  live: LiveUpdates
   /** The Android app's native side (reminders, widget); null in the browser. */
   native: NativeBridge | null
   /** Registers the phone for sync signals (FCM); null in the browser or without the API. */
@@ -67,10 +70,12 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     // Near-instant sync (not in the demo: its fake Graph can't be subscribed to). Browsers get signals
     // over Web PubSub; the phone over FCM, which native code turns into a `changed` event (a sync).
     const api = config.apiBaseUrl && !accountKey.startsWith('demo') ? new PushApi(config.apiBaseUrl, auth.getApiToken) : null
+    const live = new LiveUpdates(api !== null)
     const signals = api
       ? new SyncSignals({
           accountKey,
           engine,
+          live,
           listIds: async () => ((await db.lists.toCollection().primaryKeys()) as string[]).filter((id) => !isTempId(id)),
           subscriptions: new GraphSubscriptions({ svc, getHook: () => api.getGraphHook() }),
           createRealtime: (handlers) =>
@@ -78,7 +83,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
         })
       : null
     const devices = api && isNative ? new DeviceRegistration({ accountKey, native: WoutistNative, api }) : null
-    return { accountKey, db, svc, engine, repo, categories, settings, push, signals, native, devices }
+    return { accountKey, db, svc, engine, repo, categories, settings, push, signals, live, native, devices }
     // The Graph client only depends on the account.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountKey])
@@ -93,8 +98,11 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     const registerDevice = services.devices && services.engine.on((event) => {
       if (event === 'synced') void services.devices?.run()
     })
+    // On the phone, signals arrive over FCM: they work when this phone is registered.
+    const watchRegistration = services.devices?.subscribe((r) => services.live.setConnection(r.ok, r.error))
     void services.devices?.run()
     return () => {
+      watchRegistration?.()
       registerDevice?.()
       services.native?.stop()
       services.signals?.stop()

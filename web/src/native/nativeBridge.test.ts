@@ -79,7 +79,7 @@ describe('NativeBridge', () => {
     bridge.start()
     await waitFor(() => expect(native.listeners.has('changed')).toBe(true))
     native.listeners.get('changed')!()
-    expect(engine.sync).toHaveBeenCalled()
+    expect(engine.sync).toHaveBeenCalledWith({ reason: 'signal' })
   })
 
   it('stops pushing after stop()', async () => {

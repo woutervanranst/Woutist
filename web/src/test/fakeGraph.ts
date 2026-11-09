@@ -78,6 +78,8 @@ export class FakeGraph {
   categoryRename: 'ignored' | 'refused' | 'applied' = 'ignored'
   /** Change-notification subscriptions of this app for the user (`/subscriptions`). */
   subscriptions = new Map<string, FakeSubscription>()
+  /** Called (and awaited) for each request before it is answered, so a test can look at the app mid-sync. */
+  onRequest?: (request: RecordedRequest) => void | Promise<void>
   private failures: Failure[] = []
 
   addList(displayName: string, extra: Partial<TodoTaskList> = {}): string {
@@ -105,7 +107,7 @@ export class FakeGraph {
       lastModifiedDateTime: now(),
       ...task,
       id,
-      checklistItems: (task.checklistItems ?? []).map((c) => ({ ...c, id: c.id ?? nextId('S') })),
+      checklistItems: (task.checklistItems ?? []).map((c) => ({ ...c, id: c.id ?? nextId('S'), createdDateTime: c.createdDateTime ?? now() })),
     }
     this.list(listId).tasks.set(id, stored)
     this.touch(listId, id)
@@ -126,7 +128,8 @@ export class FakeGraph {
   serverUpdate(listId: string, taskId: string, patch: Partial<TodoTask>) {
     const t = this.task(listId, taskId)
     if (!t) throw new Error('no such task')
-    Object.assign(t, patch, { lastModifiedDateTime: now() })
+    const steps = patch.checklistItems?.map((c) => ({ ...c, id: c.id ?? nextId('S'), createdDateTime: c.createdDateTime ?? now() }))
+    Object.assign(t, patch, steps ? { checklistItems: steps } : {}, { lastModifiedDateTime: now() })
     this.touch(listId, taskId)
   }
 
@@ -183,7 +186,9 @@ export class FakeGraph {
             body = text
           }
         }
-        this.requests.push({ method, url, headers: request.headers, body })
+        const recorded = { method, url, headers: request.headers, body }
+        this.requests.push(recorded)
+        await this.onRequest?.(recorded)
         const failure = this.failures.find(
           (f) => f.method === method && f.remaining > 0 && f.pattern.test(url.pathname),
         )

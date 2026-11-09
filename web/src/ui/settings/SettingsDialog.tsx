@@ -71,7 +71,7 @@ export function SettingsDialog({ open, onClose, extra }: Props) {
                 checked={prefs.confirmDelete}
                 onChange={(_, d) => update((p) => ({ ...p, confirmDelete: d.checked }))}
               />
-              <Button appearance="secondary" onClick={() => void engine.sync({ full: true })}>
+              <Button appearance="secondary" onClick={() => void engine.sync({ reason: 'manual-full' })}>
                 Sync everything now
               </Button>
             </div>

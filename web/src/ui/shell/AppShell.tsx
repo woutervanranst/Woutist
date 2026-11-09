@@ -295,7 +295,7 @@ function SyncIndicator() {
             ]
   return (
     <Tooltip content={`${label} (click to sync)`} relationship="label">
-      <Button appearance="transparent" className={styles.headerButton} icon={icon} onClick={() => void engine.sync()} />
+      <Button appearance="transparent" className={styles.headerButton} icon={icon} onClick={() => void engine.sync({ reason: 'manual' })} />
     </Tooltip>
   )
 }
