@@ -30,7 +30,7 @@ The Function App reaches storage with **its managed identity** (`AzureWebJobsSto
 | `WEBPUBSUB_ENDPOINT` / `WEBPUBSUB_HUB` | `https://wps-woutist.webpubsub.azure.com` and `sync`; reached with the managed identity. Locally, `WEBPUBSUB_CONNECTION_STRING` instead. Optional: without it, open web tabs get no signals |
 | `FCM_SERVICE_ACCOUNT` | Firebase service-account key (the JSON, on one line) for FCM HTTP v1. Optional: without it, phones get no signals |
 
-CORS allows only the site's origins (custom domain and default SWA host) and `http://localhost:5173`.
+CORS allows only the site's origins (custom domain and default SWA host), `https://localhost` (the Android app: Capacitor serves the web app from that origin) and `http://localhost:5173`. Without `https://localhost`, phones can't register for sync signals and fall back to polling.
 
 ## How it was created
 
@@ -52,7 +52,7 @@ az functionapp config appsettings set -g rg-woutist -n func-woutist --settings \
   AzureWebJobsStorage__accountName=<account> TABLES_ENDPOINT=https://<account>.table.core.windows.net \
   ENTRA_CLIENT_ID=<clientId> VAPID_PUBLIC_KEY=<pub> VAPID_PRIVATE_KEY=<priv> VAPID_SUBJECT=https://<swa-host> ALLOWED_USERS=
 az functionapp config appsettings delete -g rg-woutist -n func-woutist --setting-names AzureWebJobsStorage
-az functionapp cors add -g rg-woutist -n func-woutist --allowed-origins https://<swa-host> http://localhost:5173
+az functionapp cors add -g rg-woutist -n func-woutist --allowed-origins https://<swa-host> https://localhost http://localhost:5173
 ```
 
 ## Near-instant sync

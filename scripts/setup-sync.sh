@@ -2,6 +2,7 @@
 # One-time setup for near-instant sync (see docs/deployment.md#near-instant-sync):
 #   - Azure Web PubSub (Free) for open web tabs, with the Function App's identity as Service Owner
 #   - Function App settings: GRAPH_HOOK_SECRET (kept if already set), PUBLIC_API_BASE_URL, WEBPUBSUB_*
+#   - Function App CORS: https://localhost, the Android app's origin (without it phones can't register)
 #   - optionally FCM_SERVICE_ACCOUNT (Firebase service-account key) and the CI secret with google-services.json
 # Idempotent. Requires: az (logged in to the Woutist subscription), gh (for the CI secret), jq, openssl.
 #
@@ -44,6 +45,13 @@ az functionapp config appsettings set -g "$RG" -n "$FUNC" -o none --settings \
   "PUBLIC_API_BASE_URL=https://$FUNC.azurewebsites.net" \
   "WEBPUBSUB_ENDPOINT=https://$PUBSUB_HOST" \
   "WEBPUBSUB_HUB=$HUB"
+
+echo "==> Function App CORS allows the Android app (https://localhost)"
+# Capacitor serves the web app from https://localhost: without it the phone can't fetch the Graph hook or
+# register its FCM token, so it gets no sync signals and only polls.
+if [ -z "$(az functionapp cors show -g "$RG" -n "$FUNC" --query "allowedOrigins[?@=='https://localhost'] | [0]" -o tsv)" ]; then
+  az functionapp cors add -g "$RG" -n "$FUNC" --allowed-origins https://localhost -o none
+fi
 
 if [ -n "$SERVICE_ACCOUNT" ]; then
   echo "==> FCM_SERVICE_ACCOUNT from $SERVICE_ACCOUNT"
