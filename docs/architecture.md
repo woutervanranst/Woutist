@@ -67,6 +67,15 @@ Due date and reminder are **one control**: a date, and optionally a reminder hou
 
 The picker opens from a task's date chip, its right-click menu (a row of quick-date icons, then hours) and the details pane. On phones it's a bottom sheet. Quick dates, reminder times and whether a date preselects the first reminder time come from Settings.
 
+### Reminder bell
+
+When a reminder comes due, a phone shows only its push notification (or, in the Android app, the native alarm's): nothing appears inside the app. On a computer (a fine pointer, not the Android app) the header has a **bell** between sync and settings, with a badge counting the reminders that are due. It opens a popover listing them (open tasks whose reminder passed within the last 7 days, newest first). Each can be:
+
+- **Snoozed** to 10 minutes, 1 hour, the next of the user's reminder times today, the first of tomorrow, or a picked time. That moves the task's own reminder (`reminderDateTime`), so it is saved to Microsoft To Do and follows the task to every device.
+- **Dismissed**, or all at once. Graph has no "dismissed" state, so this is remembered only on this device, per account (`dismissedReminders` in the preferences: task id → the reminder time that was dismissed). A task whose reminder is moved to another time shows up again. Entries for tasks that are gone or rescheduled are pruned on the next dismissal.
+
+The logic is in `models/dueReminders.ts`, the UI in `ui/shell/ReminderBell.tsx`. When the tab is hidden, push is off, and it isn't the Android app, a system notification is still shown for a reminder that comes due (`ui/shell/useInAppReminders.ts`).
+
 ### Settings that follow you
 
 Quick dates, reminder times, the reminder rule and the start page are saved in the Microsoft account (`services/settingsSync.ts`) as an **open extension on the default To Do list** (`com.wouteronarchitecture.woutist.settings`). That needs no permission beyond `Tasks.ReadWrite`, and the official app ignores it. The extension holds the settings as a JSON string plus the time of the last change. That is one time for all of them, so a change to one setting on one device can overwrite a change to another on a second device made before they synced. A start page is missing from settings saved by older versions: that reads as the default.

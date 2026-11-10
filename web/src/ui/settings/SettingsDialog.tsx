@@ -76,7 +76,7 @@ export function SettingsDialog({ open, onClose, extra, scrollTo }: Props) {
             <Divider />
             <div className={styles.section} style={{ marginTop: 16 }}>
               <Subtitle2>General</Subtitle2>
-              <Field label="Open the app on" hint="Used on all your devices.">
+              <Field label="Open the app on">
                 <Select value={startPage} onChange={(_, d) => setStartPage(normalizeStartPage(d.value))}>
                   <option value="tasks">Tasks</option>
                   {SMART_LISTS.filter((s) => prefs.smartLists[s.id] || s.id === startPage).map((s) => (
@@ -87,7 +87,7 @@ export function SettingsDialog({ open, onClose, extra, scrollTo }: Props) {
                 </Select>
               </Field>
               <Switch
-                label="Confirm before deleting"
+                label="Confirm before deleting a task"
                 checked={prefs.confirmDelete}
                 onChange={(_, d) => update((p) => ({ ...p, confirmDelete: d.checked }))}
               />

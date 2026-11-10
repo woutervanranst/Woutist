@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
+import type { DismissedReminders } from '../models/dueReminders'
 import { DEFAULT_DATE_SETTINGS, type DateSettings, normalizeDateSettings } from '../models/quickDates'
 import { DEFAULT_START_PAGE, type SmartListId, type SortPref, type StartPage, normalizeStartPage } from '../models/views'
 
@@ -19,6 +20,8 @@ export interface Prefs {
   dates: DateSettings
   /** Where the app opens. Saved in the account, like `dates`. */
   startPage: StartPage
+  /** Reminders dismissed from the bell on this device (not saved to the account): task id → reminder time. */
+  dismissedReminders: DismissedReminders
   /** When `dates` or `startPage` was last changed, on any device (ISO); null while never changed. */
   syncedUpdatedAt: string | null
   /** `dates` or `startPage` changed on this device and isn't saved to the account yet. */
@@ -33,6 +36,7 @@ export const DEFAULT_PREFS: Prefs = {
   showCompleted: {},
   dates: DEFAULT_DATE_SETTINGS,
   startPage: DEFAULT_START_PAGE,
+  dismissedReminders: {},
   syncedUpdatedAt: null,
   syncedDirty: false,
 }
@@ -40,6 +44,11 @@ export const DEFAULT_PREFS: Prefs = {
 const listeners = new Set<() => void>()
 const cache = new Map<string, Prefs>()
 const storageKey = (accountKey: string) => `woutist:prefs:${accountKey}`
+
+function normalizeDismissed(raw: unknown): DismissedReminders {
+  if (!raw || typeof raw !== 'object') return {}
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => typeof v === 'string'))
+}
 
 function read(accountKey: string): Prefs {
   const cached = cache.get(accountKey)
@@ -57,6 +66,7 @@ function read(accountKey: string): Prefs {
         smartLists: { ...DEFAULT_PREFS.smartLists, ...parsed.smartLists },
         dates: normalizeDateSettings(parsed.dates),
         startPage: normalizeStartPage(parsed.startPage),
+        dismissedReminders: normalizeDismissed(parsed.dismissedReminders),
         syncedUpdatedAt: parsed.syncedUpdatedAt ?? datesUpdatedAt ?? null,
         syncedDirty: parsed.syncedDirty ?? datesDirty ?? false,
       }
