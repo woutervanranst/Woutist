@@ -23,7 +23,7 @@ import { ArrowLeftRegular } from '@fluentui/react-icons/svg/arrow-left'
 import { NavigationRegular } from '@fluentui/react-icons/svg/navigation'
 import { SettingsRegular } from '@fluentui/react-icons/svg/settings'
 import { SignOutRegular } from '@fluentui/react-icons/svg/sign-out'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useServices, useSignOut } from '../../app/AppServices'
 import { useMediaQuery } from '../../app/theme'
@@ -37,6 +37,7 @@ import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
 import { TaskListView } from '../taskList/TaskListView'
 import { useAccountPrefs, useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
 import { isNative } from '../../platform/native'
+import { ReminderBell } from './ReminderBell'
 import { ReminderHealthBanner } from './ReminderHealthBanner'
 import { SearchField } from './SearchField'
 import { SyncIndicator } from './SyncIndicator'
@@ -101,20 +102,10 @@ const useStyles = makeStyles({
 
 export function AppShell() {
   const styles = useStyles()
-  const { dispatchToast } = useToastController('app')
   usePlatformNavigation()
-  useInAppReminders(
-    useCallback(
-      (title: string) =>
-        dispatchToast(
-          <Toast>
-            <ToastTitle>⏰ {title}</ToastTitle>
-          </Toast>,
-          { intent: 'info', timeout: 10_000 },
-        ),
-      [dispatchToast],
-    ),
-  )
+  useInAppReminders()
+  // The bell is for computers: on a phone the push notification is the reminder, and nothing more.
+  const showBell = useMediaQuery('(pointer: fine)') && !isNative
   const desktop = useMediaQuery('(min-width: 900px)')
   const wide = useMediaQuery('(min-width: 1200px)')
   const [navOpen, setNavOpen] = useState(false)
@@ -164,6 +155,7 @@ export function AppShell() {
             setSettingsOpen(true)
           }}
         />
+        {showBell && <ReminderBell />}
         <Tooltip content="Settings" relationship="label">
           <Button
             appearance="transparent"

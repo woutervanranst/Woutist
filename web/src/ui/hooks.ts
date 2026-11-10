@@ -53,6 +53,21 @@ export function useAttachments(taskId: string | null): AttachmentRecord[] {
   )
 }
 
+/** The current time, refreshed every `intervalMs` and whenever the tab comes back to the foreground. */
+export function useNow(intervalMs: number): Date {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const tick = () => setNow(new Date())
+    const id = setInterval(tick, intervalMs)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [intervalMs])
+  return now
+}
+
 export function useSyncStatus(): SyncStatus {
   const { engine } = useServices()
   return useSyncExternalStore(engine.subscribe, engine.getStatus)
