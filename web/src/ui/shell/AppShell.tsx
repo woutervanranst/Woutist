@@ -16,7 +16,6 @@ import {
   Toaster,
   Tooltip,
   makeStyles,
-  mergeClasses,
   tokens,
   useToastController,
 } from '@fluentui/react-components'
@@ -24,7 +23,7 @@ import { ArrowLeftRegular } from '@fluentui/react-icons/svg/arrow-left'
 import { NavigationRegular } from '@fluentui/react-icons/svg/navigation'
 import { SettingsRegular } from '@fluentui/react-icons/svg/settings'
 import { SignOutRegular } from '@fluentui/react-icons/svg/sign-out'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useServices, useSignOut } from '../../app/AppServices'
 import { useMediaQuery } from '../../app/theme'
@@ -36,7 +35,7 @@ import { useInAppReminders } from './useInAppReminders'
 import { Sidebar } from '../sidebar/Sidebar'
 import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
 import { TaskListView } from '../taskList/TaskListView'
-import { useHasUpcomingReminders, useListDimmed, useLists, useSelectedTask, useSyncStatus } from '../hooks'
+import { useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
 import { isNative } from '../../platform/native'
 import { ReminderHealthBanner } from './ReminderHealthBanner'
 import { SearchField } from './SearchField'
@@ -96,11 +95,6 @@ const useStyles = makeStyles({
   body: { display: 'flex', minHeight: 0, minWidth: 0, overflow: 'hidden' },
   sidebar: { width: '280px', flexShrink: 0, borderRight: `1px solid ${tokens.colorNeutralStroke2}` },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
-  // Data that isn't confirmed current yet (still interactive). Reduced motion: no fade.
-  mainStale: {
-    opacity: 0.55,
-    '@media (prefers-reduced-motion: no-preference)': { transitionProperty: 'opacity', transitionDuration: '0.2s' },
-  },
   detail: { width: '380px', flexShrink: 0, borderLeft: `1px solid ${tokens.colorNeutralStroke2}`, minHeight: 0 },
   mobileDetail: { display: 'flex', flexDirection: 'column', height: '100%' },
 })
@@ -202,7 +196,7 @@ export function AppShell() {
           <Sidebar onNavigate={() => setNavOpen(false)} />
         </OverlayDrawer>
 
-        <MainArea>
+        <main className={styles.main}>
           {!desktop && taskId ? (
             <div className={styles.mobileDetail}>
               <Button
@@ -220,7 +214,7 @@ export function AppShell() {
           ) : (
             <ViewRoutes />
           )}
-        </MainArea>
+        </main>
 
         {detailInline && (
           <div className={styles.detail}>
@@ -239,13 +233,6 @@ export function AppShell() {
       <SyncErrorToasts />
     </div>
   )
-}
-
-/** The main area dims while the list isn't confirmed current. Only this component follows the sync status. */
-function MainArea({ children }: { children: ReactNode }) {
-  const styles = useStyles()
-  const dimmed = useListDimmed()
-  return <main className={mergeClasses(styles.main, dimmed && styles.mainStale)}>{children}</main>
 }
 
 // Views are passed as stable objects: a new one would make the list filter all tasks again, e.g.

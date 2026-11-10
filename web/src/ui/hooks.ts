@@ -11,7 +11,7 @@ import { orderLists } from '../models/views'
 import type { AttachmentRecord, CategoryRecord } from '../services/db'
 import type { LiveState } from '../services/sync/liveUpdates'
 import type { SyncStatus } from '../services/sync/syncEngine'
-import { type SyncDescription, describeSync, shouldDimList } from './syncText'
+import { type SyncDescription, describeSync } from './syncText'
 
 export function useLists(): TodoList[] | undefined {
   const { db } = useServices()
@@ -62,15 +62,6 @@ export function useSyncStatus(): SyncStatus {
 export function useLiveUpdates(): LiveState {
   const { live } = useServices()
   return useSyncExternalStore(live.subscribe, live.getState)
-}
-
-/**
- * True while the list should look unconfirmed (see `shouldDimList`). A boolean snapshot, so only the
- * component using it re-renders when the status changes, not on every sync progress step.
- */
-export function useListDimmed(): boolean {
-  const { engine } = useServices()
-  return useSyncExternalStore(engine.subscribe, () => shouldDimList(engine.getStatus(), Date.now()))
 }
 
 /**

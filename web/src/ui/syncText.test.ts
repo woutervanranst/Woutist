@@ -15,7 +15,6 @@ import {
   manualToast,
   progressText,
   reasonText,
-  shouldDimList,
   statusLine,
 } from './syncText'
 
@@ -138,33 +137,6 @@ describe('progressText', () => {
   it('counts tasks while checking everything', () => {
     expect(progressText({ phase: 'full', done: 1240, total: 8316 }, L)).toBe('Checking everything · 1,240 of 8,316 tasks')
     expect(progressText({ phase: 'full', done: 0, total: 0 }, L)).toBe('Checking everything…')
-  })
-})
-
-describe('shouldDimList', () => {
-  const syncing = (patch: Partial<SyncStatus>) =>
-    status({ state: 'syncing', reason: 'startup', progress: { phase: 'changes', done: 0, total: 3 }, ...patch })
-  const old = NOW - 6 * MIN
-
-  it('dims while the quick pass of a startup or visible sync runs and the data is old', () => {
-    expect(shouldDimList(syncing({ lastSyncAt: old }), NOW)).toBe(true)
-    expect(shouldDimList(syncing({ lastSyncAt: old, reason: 'visible' }), NOW)).toBe(true)
-  })
-  it('does not dim for background syncs', () => {
-    for (const reason of ['interval', 'signal', 'online', 'reconnect', 'manual', 'manual-full'] as const) {
-      expect(shouldDimList(syncing({ lastSyncAt: old, reason }), NOW)).toBe(false)
-    }
-  })
-  it('does not dim when the last sync was recent (5 minutes or less)', () => {
-    expect(shouldDimList(syncing({ lastSyncAt: NOW - 5 * MIN }), NOW)).toBe(false)
-  })
-  it('stops dimming as soon as the quick pass ends, before the full check', () => {
-    expect(shouldDimList(syncing({ lastSyncAt: old, progress: { phase: 'full', done: 0, total: 9 } }), NOW)).toBe(false)
-  })
-  it('does not dim when idle, offline, failed, or before the first sync', () => {
-    expect(shouldDimList(status({ lastSyncAt: old }), NOW)).toBe(false)
-    expect(shouldDimList(syncing({ lastSyncAt: null }), NOW)).toBe(false)
-    expect(shouldDimList(syncing({ lastSyncAt: old, state: 'offline' }), NOW)).toBe(false)
   })
 })
 

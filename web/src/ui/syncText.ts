@@ -99,20 +99,6 @@ export function statusLine(status: SyncStatus, now: number, locale?: string): st
   return status.lastFullSyncAt === null ? synced : `${synced} · everything checked ${when(status.lastFullSyncAt)}`
 }
 
-/**
- * The task list looks unconfirmed while the quick pass of a sync you'd notice (opening or returning to the
- * app) runs on data older than 5 minutes. It clears as soon as the quick pass ends, not after the full check.
- */
-export function shouldDimList(status: SyncStatus, now: number): boolean {
-  return (
-    status.state === 'syncing' &&
-    status.progress?.phase === 'changes' &&
-    (status.reason === 'startup' || status.reason === 'visible') &&
-    status.lastSyncAt !== null &&
-    now - status.lastSyncAt > FRESH_MS
-  )
-}
-
 // ---------- the log ----------
 
 const received = (entry: SyncLogEntry) => ({

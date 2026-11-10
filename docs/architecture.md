@@ -55,7 +55,7 @@ src/dev/        Dev-only: demo mode (?demo) backed by the in-memory fake Graph, 
 
 - A progress ring around the sync arrows while syncing. Tapping it says what is running ("Getting changes · 7 of 12 lists", "Checking everything · 1,240 of 8,316 tasks") with a link to Settings > Sync. It starts nothing.
 - Resting, in this order: *Sync problem*, *Offline*, *N changes to send*, then *Up to date* (cloud with a checkmark) when the last sync succeeded and is under 5 minutes old, or when live updates are on. Otherwise a cloud with a clock says *Last synced Fri 17:45*, and *Not synced yet* before the first success. A checkmark never shows before a sync has succeeded.
-- Tapping it otherwise syncs, and a toast says what that found. When you open or return to the app after more than 5 minutes, the task list is dimmed until the quick pass is done.
+- Tapping it otherwise syncs, and a toast says what that found.
 
 ### Dates and reminders
 
