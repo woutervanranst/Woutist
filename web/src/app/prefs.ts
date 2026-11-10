@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { DEFAULT_DATE_SETTINGS, type DateSettings, normalizeDateSettings } from '../models/quickDates'
-import type { SmartListId, SortPref } from '../models/views'
+import { DEFAULT_START_PAGE, type SmartListId, type SortPref, type StartPage, normalizeStartPage } from '../models/views'
 
 export type ThemePref = 'system' | 'light' | 'dark'
 
@@ -13,14 +13,16 @@ export interface Prefs {
   /** Whether the completed section is expanded, per view key. */
   showCompleted: Record<string, boolean>
   /**
-   * Quick dates and reminder times. Unlike the rest, these are also saved in the Microsoft account so
-   * every device offers the same ones (services/settingsSync.ts).
+   * Quick dates and reminder times. Unlike the rest, these (and `startPage`) are also saved in the
+   * Microsoft account so every device has the same ones (services/settingsSync.ts).
    */
   dates: DateSettings
-  /** When `dates` was last changed, on any device (ISO); null while never changed. */
-  datesUpdatedAt: string | null
-  /** `dates` changed on this device and isn't saved to the account yet. */
-  datesDirty: boolean
+  /** Where the app opens. Saved in the account, like `dates`. */
+  startPage: StartPage
+  /** When `dates` or `startPage` was last changed, on any device (ISO); null while never changed. */
+  syncedUpdatedAt: string | null
+  /** `dates` or `startPage` changed on this device and isn't saved to the account yet. */
+  syncedDirty: boolean
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -30,8 +32,9 @@ export const DEFAULT_PREFS: Prefs = {
   sort: {},
   showCompleted: {},
   dates: DEFAULT_DATE_SETTINGS,
-  datesUpdatedAt: null,
-  datesDirty: false,
+  startPage: DEFAULT_START_PAGE,
+  syncedUpdatedAt: null,
+  syncedDirty: false,
 }
 
 const listeners = new Set<() => void>()
@@ -45,12 +48,17 @@ function read(accountKey: string): Prefs {
   try {
     const raw = localStorage.getItem(storageKey(accountKey))
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<Prefs>
+      // `syncedUpdatedAt` and `syncedDirty` were called `datesUpdatedAt` and `datesDirty`.
+      const parsed = JSON.parse(raw) as Partial<Prefs> & { datesUpdatedAt?: string | null; datesDirty?: boolean }
+      const { datesUpdatedAt, datesDirty, ...current } = parsed
       prefs = {
         ...DEFAULT_PREFS,
-        ...parsed,
+        ...current,
         smartLists: { ...DEFAULT_PREFS.smartLists, ...parsed.smartLists },
         dates: normalizeDateSettings(parsed.dates),
+        startPage: normalizeStartPage(parsed.startPage),
+        syncedUpdatedAt: parsed.syncedUpdatedAt ?? datesUpdatedAt ?? null,
+        syncedDirty: parsed.syncedDirty ?? datesDirty ?? false,
       }
     }
   } catch {
@@ -99,7 +107,7 @@ export function subscribePrefs(listener: () => void): () => void {
   }
 }
 
-/** Preferences of the signed-in account, kept in localStorage. Only `dates` is also saved to Graph. */
+/** Preferences of the signed-in account, kept in localStorage. `dates` and `startPage` are also saved to Graph. */
 export function usePrefs(accountKey: string): [Prefs, (update: (p: Prefs) => Prefs) => void] {
   const prefs = useSyncExternalStore(subscribePrefs, () => read(accountKey))
   const update = useCallback(

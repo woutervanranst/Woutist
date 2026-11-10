@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useServices, useSignOut } from '../../app/AppServices'
 import { useMediaQuery } from '../../app/theme'
-import { SMART_LISTS } from '../../models/views'
+import { SMART_LISTS, startPath } from '../../models/views'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { NotificationSettings } from '../settings/NotificationSettings'
 import { usePlatformNavigation } from '../../platform/navigation'
@@ -35,7 +35,7 @@ import { useInAppReminders } from './useInAppReminders'
 import { Sidebar } from '../sidebar/Sidebar'
 import { TaskDetailPane } from '../taskDetail/TaskDetailPane'
 import { TaskListView } from '../taskList/TaskListView'
-import { useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
+import { useAccountPrefs, useHasUpcomingReminders, useLists, useSelectedTask, useSyncStatus } from '../hooks'
 import { isNative } from '../../platform/native'
 import { ReminderHealthBanner } from './ReminderHealthBanner'
 import { SearchField } from './SearchField'
@@ -256,6 +256,9 @@ function ViewRoutes() {
 function HomeRedirect() {
   const lists = useLists()
   const status = useSyncStatus()
+  const [prefs] = useAccountPrefs()
+  const start = startPath(prefs.startPage, prefs.smartLists)
+  if (start) return <Navigate to={start} replace />
   const defaultList = lists?.find((l) => l.wellknownListName === 'defaultList')
   if (defaultList) return <Navigate to={`/lists/${encodeURIComponent(defaultList.id)}`} replace />
   if (lists && lists.length > 0) return <Navigate to={`/lists/${encodeURIComponent(lists[0].id)}`} replace />

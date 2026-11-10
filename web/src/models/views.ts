@@ -23,6 +23,21 @@ export const SMART_LISTS: { id: SmartListId; label: string }[] = [
   { id: 'completed', label: 'Completed' },
 ]
 
+/** Where the app opens: the default list ("Tasks") or one of the smart lists. */
+export type StartPage = 'tasks' | SmartListId
+
+export const DEFAULT_START_PAGE: StartPage = 'tasks'
+
+/** A stored or received start page, or the default when it isn't one we know. */
+export function normalizeStartPage(raw: unknown): StartPage {
+  return SMART_LISTS.some((s) => s.id === raw) ? (raw as SmartListId) : DEFAULT_START_PAGE
+}
+
+/** The path the app opens on: the chosen smart list, unless it's switched off (null: open the default list). */
+export function startPath(startPage: StartPage, enabled: Record<SmartListId, boolean>): string | null {
+  return startPage !== 'tasks' && enabled[startPage] ? `/${startPage}` : null
+}
+
 export function viewKey(view: ViewRef): string {
   if (view.kind === 'smart') return `smart:${view.id}`
   if (view.kind === 'list') return `list:${view.listId}`

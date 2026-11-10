@@ -4,7 +4,7 @@
 
 Microsoft Graph is the **only source of truth**. On tasks, Woutist writes only native To Do fields: title, status, importance, due date, reminder (`isReminderOn` + `reminderDateTime`), recurrence, steps (`checklistItems`), notes (`body`), categories and attachments. Updates are **field-level PATCHes**, so properties Woutist doesn't model are never touched. Stop using Woutist and the official app has everything, including its own reminders.
 
-The one thing Woutist adds is its own settings that follow you to every device (quick dates and reminder times). They're an open extension on the default list, which the official app ignores (see [Settings that follow you](#settings-that-follow-you)).
+The one thing Woutist adds is its own settings that follow you to every device (quick dates, reminder times and the start page). They're an open extension on the default list, which the official app ignores (see [Settings that follow you](#settings-that-follow-you)).
 
 Everything Woutist keeps for itself is disposable:
 
@@ -69,11 +69,13 @@ The picker opens from a task's date chip, its right-click menu (a row of quick-d
 
 ### Settings that follow you
 
-Quick dates, reminder times and the reminder rule are saved in the Microsoft account (`services/settingsSync.ts`) as an **open extension on the default To Do list** (`com.wouteronarchitecture.woutist.settings`). That needs no permission beyond `Tasks.ReadWrite`, and the official app ignores it. The extension holds the settings as a JSON string plus the time of the last change.
+Quick dates, reminder times, the reminder rule and the start page are saved in the Microsoft account (`services/settingsSync.ts`) as an **open extension on the default To Do list** (`com.wouteronarchitecture.woutist.settings`). That needs no permission beyond `Tasks.ReadWrite`, and the official app ignores it. The extension holds the settings as a JSON string plus the time of the last change. That is one time for all of them, so a change to one setting on one device can overwrite a change to another on a second device made before they synced. A start page is missing from settings saved by older versions: that reads as the default.
 
 - A change is kept in `localStorage` with its time and marked unsaved, then saved 1.5 s later.
 - After every sync the extension is read back. The newer side wins (last writer wins, by the time of the change).
 - An unsaved change (offline, or an error) is retried after the next sync.
+
+**Start page** (Settings > General > *Open the app on*): where the app opens at `/`: Tasks (the default list, the default) or a smart list. A deep link, a notification, the Android shortcuts and the widget still go where they point. A smart list that is switched off in Settings falls back to Tasks.
 
 ### Dates and time zones
 
