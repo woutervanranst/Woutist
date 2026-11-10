@@ -2,12 +2,12 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router'
 import { useServices } from '../app/AppServices'
-import { usePrefs } from '../app/prefs'
+import { type Prefs, usePrefs } from '../app/prefs'
 import { useMediaQuery } from '../app/theme'
 import type { DateSettings } from '../models/quickDates'
 import { todayLocal } from '../models/time'
 import type { Task, TodoList } from '../models/todo'
-import { orderLists } from '../models/views'
+import { type StartPage, orderLists } from '../models/views'
 import type { AttachmentRecord, CategoryRecord } from '../services/db'
 import type { LiveState } from '../services/sync/liveUpdates'
 import type { SyncStatus } from '../services/sync/syncEngine'
@@ -95,6 +95,13 @@ export function useAccountPrefs() {
   return usePrefs(accountKey)
 }
 
+/** Marks a change to a synced setting as unsaved. */
+function stampSynced(p: Prefs): Pick<Prefs, 'syncedUpdatedAt' | 'syncedDirty'> {
+  // Last writer wins across devices, so a change must never look older than the one it replaces.
+  const previous = p.syncedUpdatedAt ? Date.parse(p.syncedUpdatedAt) : 0
+  return { syncedUpdatedAt: new Date(Math.max(Date.now(), previous + 1)).toISOString(), syncedDirty: true }
+}
+
 /**
  * Quick dates and reminder times. Changes are marked for saving to the Microsoft account, so every
  * device gets them (services/settingsSync.ts).
@@ -105,15 +112,22 @@ export function useDateSettings(): [DateSettings, (fn: (s: DateSettings) => Date
     (fn: (s: DateSettings) => DateSettings) =>
       update((p) => {
         const dates = fn(p.dates)
-        if (dates === p.dates) return p
-        // Last writer wins across devices, so a change must never look older than the one it replaces.
-        const previous = p.datesUpdatedAt ? Date.parse(p.datesUpdatedAt) : 0
-        const at = new Date(Math.max(Date.now(), previous + 1)).toISOString()
-        return { ...p, dates, datesUpdatedAt: at, datesDirty: true }
+        return dates === p.dates ? p : { ...p, dates, ...stampSynced(p) }
       }),
     [update],
   )
   return [prefs.dates, set]
+}
+
+/** Where the app opens. Changes are saved to the Microsoft account, so every device opens there. */
+export function useStartPage(): [StartPage, (page: StartPage) => void] {
+  const [prefs, update] = useAccountPrefs()
+  const set = useCallback(
+    (startPage: StartPage) =>
+      update((p) => (startPage === p.startPage ? p : { ...p, startPage, ...stampSynced(p) })),
+    [update],
+  )
+  return [prefs.startPage, set]
 }
 
 function subscribeToday(onChange: () => void): () => void {

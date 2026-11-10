@@ -1,12 +1,13 @@
 import { readPrefs, subscribePrefs, updatePrefs } from '../app/prefs'
 import { normalizeDateSettings, type DateSettings } from '../models/quickDates'
 import { isTempId } from '../models/todo'
+import { type StartPage, normalizeStartPage } from '../models/views'
 import type { WoutistDb } from './db'
 import type { SyncEngine } from './sync/syncEngine'
 import type { TaskService } from './taskService'
 
 /**
- * Woutist's settings that follow the user to every device (quick dates, reminder times) are saved
+ * Woutist's settings that follow the user to every device (quick dates, reminder times, start page) are saved
  * as an open extension on their default To Do list ("Tasks"). It needs no extra permission, and the
  * official app ignores it. Last writer wins, by the time of the change.
  */
@@ -15,6 +16,7 @@ const SCHEMA = 1
 
 interface RemoteSettings {
   dates: DateSettings
+  startPage: StartPage
   updatedAt: string
 }
 
@@ -22,8 +24,9 @@ interface RemoteSettings {
 export function parseRemoteSettings(ext: Record<string, unknown> | null): RemoteSettings | null {
   if (!ext || typeof ext.updatedAt !== 'string' || typeof ext.settings !== 'string') return null
   try {
-    const parsed = JSON.parse(ext.settings) as { dates?: unknown }
-    return { dates: normalizeDateSettings(parsed.dates), updatedAt: ext.updatedAt }
+    const parsed = JSON.parse(ext.settings) as { dates?: unknown; startPage?: unknown }
+    // Older versions saved no start page: that means the default one.
+    return { dates: normalizeDateSettings(parsed.dates), startPage: normalizeStartPage(parsed.startPage), updatedAt: ext.updatedAt }
   } catch {
     return null
   }
@@ -56,7 +59,7 @@ export class SettingsSync {
         if (event === 'synced') void this.run()
       }),
       subscribePrefs(() => {
-        if (readPrefs(this.accountKey).datesDirty) this.schedulePush()
+        if (readPrefs(this.accountKey).syncedDirty) this.schedulePush()
       }),
     )
   }
@@ -101,24 +104,28 @@ export class SettingsSync {
     const remote = parseRemoteSettings(raw)
     const local = readPrefs(this.accountKey)
 
-    if (remote && (!local.datesUpdatedAt || remote.updatedAt > local.datesUpdatedAt)) {
+    if (remote && (!local.syncedUpdatedAt || remote.updatedAt > local.syncedUpdatedAt)) {
       // Changed on another device more recently. Apply, unless it was edited here in the meantime.
       updatePrefs(this.accountKey, (p) =>
-        p.datesUpdatedAt === local.datesUpdatedAt
-          ? { ...p, dates: remote.dates, datesUpdatedAt: remote.updatedAt, datesDirty: false }
+        p.syncedUpdatedAt === local.syncedUpdatedAt
+          ? { ...p, dates: remote.dates, startPage: remote.startPage, syncedUpdatedAt: remote.updatedAt, syncedDirty: false }
           : p,
       )
       return
     }
-    if (!local.datesDirty || !local.datesUpdatedAt) return
+    if (!local.syncedDirty || !local.syncedUpdatedAt) return
     await this.svc.saveListExtension(
       list.id,
       SETTINGS_EXTENSION,
-      { schema: SCHEMA, updatedAt: local.datesUpdatedAt, settings: JSON.stringify({ dates: local.dates }) },
+      {
+        schema: SCHEMA,
+        updatedAt: local.syncedUpdatedAt,
+        settings: JSON.stringify({ dates: local.dates, startPage: local.startPage }),
+      },
       raw !== null,
     )
     updatePrefs(this.accountKey, (p) =>
-      p.datesUpdatedAt === local.datesUpdatedAt ? { ...p, datesDirty: false } : p,
+      p.syncedUpdatedAt === local.syncedUpdatedAt ? { ...p, syncedDirty: false } : p,
     )
   }
 }

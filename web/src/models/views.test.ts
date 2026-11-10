@@ -11,10 +11,12 @@ import {
   groupPlanned,
   limitGroups,
   matchesSearch,
+  normalizeStartPage,
   orderLists,
   searchText,
   sortTasks,
   splitListEmoji,
+  startPath,
   tasksForView,
 } from './views'
 
@@ -260,5 +262,24 @@ describe('presets', () => {
     expect(formatDate('2026-11-05', '2026-11-04')).toBe('Tomorrow')
     expect(formatDate('2026-11-11', '2026-11-04', 'en-US')).toBe('Wed, Nov 11')
     expect(formatDate('2027-01-11', '2026-11-04', 'en-US')).toBe('Mon, Jan 11, 2027')
+  })
+})
+
+describe('start page', () => {
+  const all = { today: true, important: true, planned: true, all: true, completed: true }
+
+  it('knows only the default list and the smart lists', () => {
+    expect(normalizeStartPage('today')).toBe('today')
+    expect(normalizeStartPage('tasks')).toBe('tasks')
+    for (const bad of ['search', 'AAMkAD=', '', null, undefined, 3]) expect(normalizeStartPage(bad)).toBe('tasks')
+  })
+
+  it('opens the default list unless a smart list was chosen', () => {
+    expect(startPath('tasks', all)).toBeNull()
+    expect(startPath('today', all)).toBe('/today')
+  })
+
+  it('falls back to the default list when the chosen smart list is switched off', () => {
+    expect(startPath('today', { ...all, today: false })).toBeNull()
   })
 })

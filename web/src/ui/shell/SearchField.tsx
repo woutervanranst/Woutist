@@ -1,6 +1,18 @@
-import { SearchBox } from '@fluentui/react-components'
+import { makeStyles, mergeClasses, SearchBox, tokens } from '@fluentui/react-components'
 import { type RefObject, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
+
+const useStyles = makeStyles({
+  // Fluent collapses the clear button once the box loses focus; keep it there while there is text,
+  // so clearing a search takes one click rather than a click to focus first.
+  clearVisible: {
+    height: 'auto',
+    width: 'auto',
+    overflow: 'visible',
+    paddingLeft: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalM,
+  },
+})
 
 /** How long typing must pause before the results update. */
 export const SEARCH_DEBOUNCE_MS = 250
@@ -10,6 +22,7 @@ export const SEARCH_DEBOUNCE_MS = 250
  * a search scans every task, completed ones included.
  */
 export function SearchField({ inputRef }: { inputRef: RefObject<HTMLInputElement | null> }) {
+  const styles = useStyles()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [params] = useSearchParams()
@@ -39,6 +52,7 @@ export function SearchField({ inputRef }: { inputRef: RefObject<HTMLInputElement
       placeholder="Search"
       aria-label="Search tasks"
       value={value}
+      contentAfter={{ className: mergeClasses(value !== '' && styles.clearVisible) }}
       style={{ width: '100%', maxWidth: 'none', minWidth: 0 }}
       onChange={(_, d) => {
         setValue(d.value)
