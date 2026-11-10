@@ -62,15 +62,32 @@ export function HourChips(props: {
   const isCustom = props.value !== null && !props.times.includes(props.value)
   const timeInput = useRef<HTMLInputElement>(null)
 
-  // In the Android app, tapping "Other" goes straight to the system clock instead of waiting for a second tap on the field.
+  // Bumped when "Other" is tapped in the Android app, to open the system clock (see the effect below).
+  const [clockRequest, setClockRequest] = useState(0)
+
+  // In the Android app, tapping "Other" goes straight to the system clock instead of waiting for a second tap on
+  // the field. The clock only opens once the field has been laid out, so this waits two frames (the tap still
+  // counts for a few seconds). Called at once, showPicker() silently does nothing on the phone.
   useEffect(() => {
-    if (!customOpen || !isNative) return
-    try {
-      timeInput.current?.showPicker()
-    } catch {
-      // No transient user activation or no picker support: the field stays there to tap.
-    }
-  }, [customOpen])
+    if (clockRequest === 0) return
+    const frame = { id: 0 }
+    frame.id = requestAnimationFrame(() => {
+      frame.id = requestAnimationFrame(() => {
+        try {
+          timeInput.current?.showPicker()
+        } catch {
+          // No picker support: the field stays there to tap.
+        }
+      })
+    })
+    return () => cancelAnimationFrame(frame.id)
+  }, [clockRequest])
+
+  const toggleCustom = () => {
+    setCustomValue(props.value ?? customValue)
+    setCustomOpen((o) => !o)
+    if (!customOpen && isNative) setClockRequest((n) => n + 1)
+  }
 
   const chip = (key: string, label: React.ReactNode, on: boolean, onClick: () => void, aria?: string) => (
     <button
@@ -98,10 +115,7 @@ export function HourChips(props: {
             {isCustom ? formatTimeOfDay(props.value!) : size === 'large' ? 'Other' : null}
           </>,
           isCustom,
-          () => {
-            setCustomValue(props.value ?? customValue)
-            setCustomOpen((o) => !o)
-          },
+          toggleCustom,
           isCustom ? `Other time (${formatTimeOfDay(props.value!)})` : 'Other time',
         )}
       </div>
