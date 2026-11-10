@@ -1,8 +1,9 @@
 import { Button, makeStyles, mergeClasses, tokens } from '@fluentui/react-components'
 import { ClockRegular } from '@fluentui/react-icons/svg/clock'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatTimeOfDay } from '../../models/dateReminder'
 import { isTime } from '../../models/quickDates'
+import { isNative } from '../../platform/native'
 
 const useStyles = makeStyles({
   chips: { display: 'flex', flexWrap: 'wrap', gap: '4px' },
@@ -59,6 +60,17 @@ export function HourChips(props: {
   const [customOpen, setCustomOpen] = useState(false)
   const [customValue, setCustomValue] = useState(props.value ?? '08:30')
   const isCustom = props.value !== null && !props.times.includes(props.value)
+  const timeInput = useRef<HTMLInputElement>(null)
+
+  // In the Android app, tapping "Other" goes straight to the system clock instead of waiting for a second tap on the field.
+  useEffect(() => {
+    if (!customOpen || !isNative) return
+    try {
+      timeInput.current?.showPicker()
+    } catch {
+      // No transient user activation or no picker support: the field stays there to tap.
+    }
+  }, [customOpen])
 
   const chip = (key: string, label: React.ReactNode, on: boolean, onClick: () => void, aria?: string) => (
     <button
@@ -96,6 +108,7 @@ export function HourChips(props: {
       {customOpen && (
         <div className={styles.custom}>
           <input
+            ref={timeInput}
             type="time"
             className={styles.time}
             value={customValue}
