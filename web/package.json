@@ -16,8 +16,8 @@
     "android:run": "npm run android:sync && cd android && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} ./gradlew installDebug && adb shell am start -n com.wouteronarchitecture.woutist.debug/com.wouteronarchitecture.woutist.MainActivity"
   },
   "dependencies": {
-    "@azure/msal-browser": "^5.27.0",
-    "@azure/msal-react": "^5.7.4",
+    "@azure/msal-browser": "^5.29.0",
+    "@azure/msal-react": "^5.8.1",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.0",
     "@dnd-kit/core": "^6.3.1",
@@ -52,14 +52,14 @@
     "@types/react-dom": "^19.3.0",
     "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "fake-indexeddb": "^6.2.7",
+    "fake-indexeddb": "^6.2.8",
     "jsdom": "^30.1.3",
-    "msw": "^3.0.3",
-    "oxlint": "^1.89.0",
+    "msw": "^3.0.4",
+    "oxlint": "^1.92.0",
     "typescript": "~7.0.2",
-    "vite": "^8.3.5",
+    "vite": "^8.3.6",
     "vite-plugin-pwa": "^2.0.0",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "license": "Apache-2.0"
 }
