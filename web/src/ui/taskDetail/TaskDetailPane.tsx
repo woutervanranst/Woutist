@@ -143,6 +143,23 @@ const useStyles = makeStyles({
     paddingRight: tokens.spacingHorizontalM,
     overflowWrap: 'anywhere',
   },
+  // Read-only twin of a step's textarea that shows web addresses as links; it mirrors the textarea's box.
+  stepLinks: {
+    flex: 1,
+    minWidth: 0,
+    boxSizing: 'border-box',
+    border: '1px solid transparent',
+    marginLeft: '-2px',
+    paddingTop: tokens.spacingVerticalSNudge,
+    paddingBottom: tokens.spacingVerticalSNudge,
+    fontFamily: tokens.fontFamilyBase,
+    fontSize: tokens.fontSizeBase300,
+    fontWeight: tokens.fontWeightRegular,
+    lineHeight: tokens.lineHeightBase300,
+    cursor: 'text',
+    whiteSpace: 'pre-wrap',
+  },
+  stepLink: { fontWeight: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' },
   stepDragging: {
     position: 'relative',
     zIndex: 1,
@@ -488,6 +505,9 @@ function StepRow({ task, step, index, count }: { task: Task; step: Step; index: 
   })
   // Keyed by id + name, so an external rename resets this local edit state.
   const [name, setName] = useState(step.displayName)
+  const [editing, setEditing] = useState(false)
+  // Web addresses show as links until the step is tapped; then the textarea takes over for editing.
+  const showLinks = !editing && hasLink(name)
 
   return (
     <div
@@ -504,31 +524,56 @@ function StepRow({ task, step, index, count }: { task: Task; step: Step; index: 
         icon={step.isChecked ? <CheckmarkCircleFilled fontSize={20} /> : <CircleRegular fontSize={20} className={styles.stepCircle} />}
         onClick={() => void repo.updateStep(task.id, step.id, { isChecked: !step.isChecked })}
       />
-      <Textarea
-        className={styles.stepInput}
-        appearance="filled-lighter"
-        resize="none"
-        rows={1}
-        // Grows with the text (CSS field-sizing; falls back to a single row elsewhere), as the title does.
-        textarea={{
-          className: mergeClasses(styles.stepText, step.isChecked && styles.done),
-          style: { fieldSizing: 'content', minHeight: 0 } as React.CSSProperties,
-        }}
-        value={name}
-        aria-label="Step"
-        onChange={(_, d) => setName(d.value.replace(/\n/g, ''))}
-        onBlur={() => {
-          const next = name.trim()
-          if (next && next !== step.displayName) void repo.updateStep(task.id, step.id, { displayName: next })
-          else setName(step.displayName)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            ;(e.target as HTMLTextAreaElement).blur()
-          }
-        }}
-      />
+      {showLinks ? (
+        <div
+          className={mergeClasses(styles.stepLinks, styles.stepText, step.isChecked && styles.done)}
+          role="textbox"
+          aria-label="Step"
+          tabIndex={0}
+          onFocus={(e) => e.target === e.currentTarget && setEditing(true)}
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest('a')) setEditing(true)
+          }}
+        >
+          {splitLinks(name).map((part, i) =>
+            part.href ? (
+              <Link key={i} href={part.href} target="_blank" rel="noreferrer" className={styles.stepLink}>
+                {part.text}
+              </Link>
+            ) : (
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </div>
+      ) : (
+        <Textarea
+          className={styles.stepInput}
+          appearance="filled-lighter"
+          resize="none"
+          rows={1}
+          autoFocus={editing}
+          // Grows with the text (CSS field-sizing; falls back to a single row elsewhere), as the title does.
+          textarea={{
+            className: mergeClasses(styles.stepText, step.isChecked && styles.done),
+            style: { fieldSizing: 'content', minHeight: 0 } as React.CSSProperties,
+          }}
+          value={name}
+          aria-label="Step"
+          onChange={(_, d) => setName(d.value.replace(/\n/g, ''))}
+          onBlur={() => {
+            setEditing(false)
+            const next = name.trim()
+            if (next && next !== step.displayName) void repo.updateStep(task.id, step.id, { displayName: next })
+            else setName(step.displayName)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              ;(e.target as HTMLTextAreaElement).blur()
+            }
+          }}
+        />
+      )}
       <Button
         ref={setActivatorNodeRef}
         className={mergeClasses(styles.iconCell, styles.stepHandle)}
