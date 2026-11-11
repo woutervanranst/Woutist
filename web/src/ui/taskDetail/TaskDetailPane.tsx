@@ -136,6 +136,13 @@ const useStyles = makeStyles({
     marginLeft: '-2px',
     '::after': { display: 'none' },
   },
+  // The text of a step, on the textarea itself. Long steps wrap, and a long address breaks instead of
+  // running off the pane. The side padding matches the old input, so the text stays where it was.
+  stepText: {
+    paddingLeft: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalM,
+    overflowWrap: 'anywhere',
+  },
   stepDragging: {
     position: 'relative',
     zIndex: 1,
@@ -497,18 +504,30 @@ function StepRow({ task, step, index, count }: { task: Task; step: Step; index: 
         icon={step.isChecked ? <CheckmarkCircleFilled fontSize={20} /> : <CircleRegular fontSize={20} className={styles.stepCircle} />}
         onClick={() => void repo.updateStep(task.id, step.id, { isChecked: !step.isChecked })}
       />
-      <Input
-        className={mergeClasses(styles.stepInput, step.isChecked && styles.done)}
+      <Textarea
+        className={styles.stepInput}
         appearance="filled-lighter"
+        resize="none"
+        rows={1}
+        // Grows with the text (CSS field-sizing; falls back to a single row elsewhere), as the title does.
+        textarea={{
+          className: mergeClasses(styles.stepText, step.isChecked && styles.done),
+          style: { fieldSizing: 'content', minHeight: 0 } as React.CSSProperties,
+        }}
         value={name}
         aria-label="Step"
-        onChange={(_, d) => setName(d.value)}
+        onChange={(_, d) => setName(d.value.replace(/\n/g, ''))}
         onBlur={() => {
           const next = name.trim()
           if (next && next !== step.displayName) void repo.updateStep(task.id, step.id, { displayName: next })
           else setName(step.displayName)
         }}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            ;(e.target as HTMLTextAreaElement).blur()
+          }
+        }}
       />
       <Button
         ref={setActivatorNodeRef}
