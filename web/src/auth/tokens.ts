@@ -1,4 +1,4 @@
-import { InteractionRequiredAuthError } from '@azure/msal-browser'
+import { AuthError, BrowserAuthErrorCodes, InteractionRequiredAuthError } from '@azure/msal-browser'
 import { msalInstance } from './msal'
 import { API_SCOPES, GRAPH_SCOPES, LOGIN_REQUEST } from './scopes'
 
@@ -7,6 +7,21 @@ export class NotSignedInError extends Error {
     super('No signed-in account')
     this.name = 'NotSignedInError'
   }
+}
+
+/**
+ * Silent failures only a sign-in can fix. Besides MSAL's interaction-required errors that is a
+ * timed-out hidden iframe: once the refresh token has expired (24 h for SPAs) or can't be read
+ * (its encryption key is a session cookie), MSAL renews through a hidden login.microsoftonline.com
+ * iframe. Browsers that block third-party cookies (Brave, Safari) hide the Microsoft session from
+ * it, and for personal accounts it then never answers: every attempt waits 10 s and fails with
+ * `timed_out`, so sync would stay broken until the user signed in again.
+ */
+function needsInteraction(error: unknown): boolean {
+  return (
+    error instanceof InteractionRequiredAuthError ||
+    (error instanceof AuthError && error.errorCode === BrowserAuthErrorCodes.timedOut)
+  )
 }
 
 /**
@@ -20,7 +35,7 @@ export async function getAccessToken(scopes: string[]): Promise<string> {
     const result = await msalInstance.acquireTokenSilent({ scopes, account })
     return result.accessToken
   } catch (error) {
-    if (error instanceof InteractionRequiredAuthError) {
+    if (needsInteraction(error)) {
       await msalInstance.acquireTokenRedirect({ scopes, account })
       return new Promise<string>(() => {})
     }
